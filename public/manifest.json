@@ -1,0 +1,16 @@
+{
+  "name": "Sharey",
+  "short_name": "Sharey",
+  "description": "Personal cross-device sharing and saving tool.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
