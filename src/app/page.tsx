@@ -7,10 +7,66 @@ import { useTheme } from 'next-themes';
 import { 
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
-  CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2
+  CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
+  Folder, Plus, MoreVertical, MoreHorizontal
 } from 'lucide-react';
-import { SharedItem, ItemType } from '@/types';
+import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
+
+function InstagramPlayer({ url }: { url: string }) {
+  const [videoData, setVideoData] = useState<{ url: string, thumb: string } | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/ig?url=${encodeURIComponent(url)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.videoUrl) {
+          setVideoData({ url: data.videoUrl, thumb: data.thumbnail });
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true));
+  }, [url]);
+
+  if (error || !videoData) {
+    // Fallback to official embed if API fails or while loading
+    let embedUrl = url.split('?')[0]; 
+    if (!embedUrl.endsWith('/')) embedUrl += '/';
+    embedUrl += 'embed';
+    
+    return (
+      <div className="mt-3 w-full max-w-sm mx-auto rounded-xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm relative">
+        {!error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900 z-10">
+             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        )}
+        <iframe 
+          src={embedUrl}
+          className="w-full relative z-0"
+          height="480"
+          style={{ border: 'none' }}
+          scrolling="no"
+          allow="encrypted-media"
+        ></iframe>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 w-full max-w-sm mx-auto rounded-xl overflow-hidden bg-black border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-center">
+       <video 
+         src={videoData.url} 
+         poster={videoData.thumb}
+         controls 
+         className="w-full h-auto max-h-[600px]"
+         playsInline
+       />
+    </div>
+  );
+}
 
 export default function Home() {
   const [items, setItems] = useState<SharedItem[]>([]);
@@ -34,6 +90,17 @@ export default function Home() {
   const [editFileRemoved, setEditFileRemoved] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Collections State
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeCollection, setActiveCollection] = useState<string | null>(null);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [collectionInputValue, setCollectionInputValue] = useState('');
+  const [editCollectionTarget, setEditCollectionTarget] = useState<Collection | null>(null);
+  const [deleteCollectionTarget, setDeleteCollectionTarget] = useState<string | null>(null);
+  const [selectedCollectionForUpload, setSelectedCollectionForUpload] = useState<string | null>(null);
+  const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
+  const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null);
+  
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -55,12 +122,13 @@ export default function Home() {
       let isFirst = true;
 
       const processPayload = async (payload: any) => {
+        const finalPayload = { ...payload, collection_id: editItemCollectionId };
         if (isFirst) {
-          const { error } = await supabase.from('shared_items').update(payload).eq('id', editTarget.id);
+          const { error } = await supabase.from('shared_items').update(finalPayload).eq('id', editTarget.id);
           if (error) throw error;
           isFirst = false;
         } else {
-          const { error } = await supabase.from('shared_items').insert({ ...payload, user_id: user.id });
+          const { error } = await supabase.from('shared_items').insert({ ...finalPayload, user_id: user.id });
           if (error) throw error;
         }
       };
@@ -84,10 +152,14 @@ export default function Home() {
       // 2. Process existing file (if not removed)
       if (editTarget.type !== 'text' && editTarget.type !== 'link' && !editFileRemoved) {
         if (isFirst) {
-           // We don't need to do anything since it's already this file in the DB, 
-           // unless they changed the text caption as filename? But we don't have a caption field for files.
-           // So just mark isFirst false so next things get inserted.
-           isFirst = false;
+           // We update the existing item to apply the potential new collection_id
+           await processPayload({
+             content: editTarget.fileName,
+             type: editTarget.type,
+             file_name: editTarget.fileName,
+             file_url: editTarget.fileUrl,
+             file_size: editTarget.fileSize,
+           });
         } else {
            // Text took the first slot, so insert the existing file as a new item
            await processPayload({
@@ -148,7 +220,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (editTarget || deleteTarget || showLogoutConfirm) {
+    if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -156,7 +228,7 @@ export default function Home() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [editTarget, deleteTarget, showLogoutConfirm]);
+  }, [editTarget, deleteTarget, showLogoutConfirm, showCollectionModal, deleteCollectionTarget]);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -164,6 +236,20 @@ export default function Home() {
     if (!user) {
       router.push('/login');
       return;
+    }
+
+    // Fetch collections
+    const { data: collectionsData } = await supabase
+      .from('collections')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (collectionsData) {
+      setCollections(collectionsData.map(c => ({
+        id: c.id,
+        name: c.name,
+        createdAt: new Date(c.created_at)
+      })));
     }
 
     const { data, error } = await supabase
@@ -179,10 +265,112 @@ export default function Home() {
         fileName: d.file_name,
         fileSize: d.file_size,
         fileUrl: d.file_url,
+        collectionId: d.collection_id,
         createdAt: new Date(d.created_at)
       })));
     }
     setLoading(false);
+  };
+
+  const handleSaveCollection = async () => {
+    if (!collectionInputValue.trim()) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (editCollectionTarget) {
+      const { error } = await supabase
+        .from('collections')
+        .update({ name: collectionInputValue.trim() })
+        .eq('id', editCollectionTarget.id);
+      
+      if (error) {
+        showNotification(error.message);
+      } else {
+        showNotification('Collection updated');
+        setShowCollectionModal(false);
+        fetchItems();
+      }
+    } else {
+      const { error } = await supabase
+        .from('collections')
+        .insert({ user_id: user.id, name: collectionInputValue.trim() });
+      
+      if (error) {
+        showNotification(error.message);
+      } else {
+        showNotification('Collection created');
+        setShowCollectionModal(false);
+        fetchItems();
+      }
+    }
+  };
+
+  const handleDeleteCollection = async () => {
+    if (!deleteCollectionTarget) return;
+    
+    const { error } = await supabase
+      .from('collections')
+      .delete()
+      .eq('id', deleteCollectionTarget);
+      
+    if (error) {
+      showNotification(error.message);
+    } else {
+      showNotification('Collection deleted');
+      if (activeCollection === deleteCollectionTarget) {
+        setActiveCollection(null);
+      }
+      setDeleteCollectionTarget(null);
+      fetchItems();
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, itemId: string) => {
+    e.dataTransfer.setData('itemId', itemId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, collectionId: string | null) => {
+    e.preventDefault();
+    if (dragOverCollectionId !== collectionId) {
+      setDragOverCollectionId(collectionId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverCollectionId(null);
+  };
+
+  const handleDropToCollection = async (e: React.DragEvent, targetCollectionId: string | null) => {
+    e.preventDefault();
+    setDragOverCollectionId(null);
+    
+    const itemId = e.dataTransfer.getData('itemId');
+    if (!itemId) return;
+
+    const itemToMove = items.find(i => i.id === itemId);
+    if (!itemToMove || itemToMove.collectionId === targetCollectionId) return;
+
+    const previousItems = [...items];
+    
+    // Optimistic update
+    setItems(items.map(item => 
+      item.id === itemId ? { ...item, collectionId: targetCollectionId } : item
+    ));
+
+    const { error } = await supabase
+      .from('shared_items')
+      .update({ collection_id: targetCollectionId })
+      .eq('id', itemId);
+
+    if (error) {
+      setItems(previousItems);
+      showNotification("Failed to move item: " + error.message);
+    } else {
+      const colName = targetCollectionId ? collections.find(c => c.id === targetCollectionId)?.name : 'All Items';
+      showNotification(`Moved to ${colName}`);
+    }
   };
 
   const executeLogout = async () => {
@@ -256,7 +444,8 @@ export default function Home() {
               file_name: file.name,
               file_size: formatFileSize(file.size),
               file_url: publicUrl,
-              mime_type: file.type
+              mime_type: file.type,
+              collection_id: selectedCollectionForUpload
             })
             .select()
             .single();
@@ -282,7 +471,8 @@ export default function Home() {
           .insert({
             user_id: user.id,
             type: detectType(inputValue),
-            content: inputValue
+            content: inputValue,
+            collection_id: selectedCollectionForUpload
           })
           .select()
           .single();
@@ -438,7 +628,8 @@ export default function Home() {
     const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
     const matchesSearch = item.content.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (item.fileName && item.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesFilter && matchesSearch;
+    const matchesCollection = activeCollection ? item.collectionId === activeCollection : true;
+    return matchesFilter && matchesSearch && matchesCollection;
   });
 
   const getIconForType = (type: ItemType) => {
@@ -481,22 +672,7 @@ export default function Home() {
       
       // Instagram
       if (parsedUrl.hostname.includes('instagram.com')) {
-        let embedUrl = url.split('?')[0]; 
-        if (!embedUrl.endsWith('/')) embedUrl += '/';
-        embedUrl += 'embed';
-        
-        return (
-          <div className="mt-3 w-full max-w-sm mx-auto rounded-xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm">
-            <iframe 
-              src={embedUrl}
-              className="w-full"
-              height="480"
-              style={{ border: 'none' }}
-              scrolling="no"
-              allow="encrypted-media"
-            ></iframe>
-          </div>
-        );
+        return <InstagramPlayer url={url} />;
       }
     } catch (e) {
       // ignore
@@ -517,7 +693,10 @@ export default function Home() {
     // 3. New files attached?
     const newFilesAdded = editAttachedFiles.length > 0;
     
-    return textChanged || fileRemoved || newFilesAdded;
+    // 4. Collection changed?
+    const collectionChanged = editItemCollectionId !== (editTarget.collectionId || null);
+
+    return textChanged || fileRemoved || newFilesAdded || collectionChanged;
   };
 
   return (
@@ -601,7 +780,20 @@ export default function Home() {
             )}
 
             <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors">
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1">
+                {collections.length > 0 && (
+                  <select
+                    value={selectedCollectionForUpload || ''}
+                    onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
+                    disabled={uploading}
+                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500"
+                  >
+                    <option value="">No Collection</option>
+                    {collections.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
@@ -664,6 +856,87 @@ export default function Home() {
               ))}
             </div>
           </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-4 mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Folder className="w-4 h-4 text-indigo-500" />
+                Collections
+              </h3>
+              <button 
+                onClick={() => {
+                  setEditCollectionTarget(null);
+                  setCollectionInputValue('');
+                  setShowCollectionModal(true);
+                }}
+                className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                title="New Collection"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-1">
+              <button
+                onClick={() => setActiveCollection(null)}
+                onDragOver={(e) => handleDragOver(e, null)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDropToCollection(e, null)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  activeCollection === null
+                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                } ${dragOverCollectionId === null ? 'ring-2 ring-indigo-400 border-transparent bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
+              >
+                All Items
+              </button>
+              
+              {collections.map(col => (
+                <div 
+                  key={col.id} 
+                  onDragOver={(e) => handleDragOver(e, col.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDropToCollection(e, col.id)}
+                  className={`group w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                    activeCollection === col.id
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
+                  onClick={() => setActiveCollection(col.id)}
+                >
+                  <span className="truncate pr-2">{col.name}</span>
+                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditCollectionTarget(col);
+                        setCollectionInputValue(col.name);
+                        setShowCollectionModal(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-indigo-600"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteCollectionTarget(col.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {collections.length === 0 && (
+                <div className="text-center py-4 text-xs text-gray-500">
+                  No collections yet
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Center Column: Feed (Scrollable) */}
@@ -683,7 +956,12 @@ export default function Home() {
             </div>
           ) : (
             filteredItems.map(item => (
-              <div key={item.id} className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}>
+              <div 
+                key={item.id} 
+                draggable
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all cursor-grab active:cursor-grabbing ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
+              >
                 
                 {/* Header with Icon */}
                 <div className="flex justify-between items-start mb-3">
@@ -702,6 +980,12 @@ export default function Home() {
                     <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider">
                       {item.type}
                     </span>
+                    {item.collectionId && collections.find(c => c.id === item.collectionId) && (
+                      <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md flex items-center gap-1">
+                        <Folder className="w-3 h-3" />
+                        {collections.find(c => c.id === item.collectionId)?.name}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
                     {format(item.createdAt, 'MMM d · h:mm a')}
@@ -778,6 +1062,7 @@ export default function Home() {
                       setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
                       setEditAttachedFiles([]);
                       setEditFileRemoved(false);
+                      setEditItemCollectionId(item.collectionId || null);
                     }} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
                       <Edit2 className="w-3.5 h-3.5" /> Edit
                     </button>
@@ -887,6 +1172,22 @@ export default function Home() {
               <Edit2 className="w-5 h-5" />
               <span>Edit Item</span>
             </div>
+            
+            {collections.length > 0 && (
+              <div className="mb-4">
+                <select
+                  value={editItemCollectionId || ''}
+                  onChange={(e) => setEditItemCollectionId(e.target.value || null)}
+                  disabled={isSavingEdit}
+                  className="w-full bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 focus:border-indigo-400 dark:focus:border-indigo-500"
+                >
+                  <option value="">No Collection</option>
+                  {collections.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 min-h-0">
               <textarea
@@ -1049,6 +1350,72 @@ export default function Home() {
                   <CheckCircle2 className="w-5 h-5" />
                 )}
                 <span>Update</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Collection Modal */}
+      {showCollectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setShowCollectionModal(false)}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+              {editCollectionTarget ? 'Edit Collection' : 'New Collection'}
+            </h3>
+            <input 
+              type="text"
+              value={collectionInputValue}
+              onChange={e => setCollectionInputValue(e.target.value)}
+              placeholder="Collection Name"
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-6 text-gray-900 dark:text-gray-100"
+              autoFocus
+              onKeyDown={e => { if(e.key === 'Enter') handleSaveCollection() }}
+            />
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setShowCollectionModal(false)}
+                className="px-4 py-2 font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveCollection}
+                disabled={!collectionInputValue.trim()}
+                className="px-6 py-2 font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all shadow-sm hover:shadow disabled:opacity-50"
+              >
+                {editCollectionTarget ? 'Update' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Collection Confirm Modal */}
+      {deleteCollectionTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setDeleteCollectionTarget(null)}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Delete Collection?</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">
+              Are you sure you want to delete this collection? This won't delete the items inside it, but they will no longer belong to this collection.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDeleteCollectionTarget(null)}
+                className="flex-1 px-4 py-2.5 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDeleteCollection}
+                className="flex-1 px-4 py-2.5 font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5"
+              >
+                Delete
               </button>
             </div>
           </div>

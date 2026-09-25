@@ -11,13 +11,16 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "btch-downloader": "^6.4.0",
     "date-fns": "^4.4.0",
+    "instagram-url-direct": "^2.0.7",
     "jimp": "^0.22.10",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
     "next-themes": "^0.4.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "snapsave-media-downloader": "^2.5.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
