@@ -44,3 +44,17 @@
 .dark .custom-scrollbar {
   scrollbar-color: #374151 transparent;
 }
+
+@keyframes border-blink {
+  0%, 100% {
+    box-shadow: 0 0 0 0px transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 3px #6366f1; /* indigo-500 */
+  }
+}
+
+.animate-border-blink {
+  animation: border-blink 0.5s ease-in-out 2;
+  border-radius: 1rem;
+}

@@ -108,6 +108,7 @@ export default function Home() {
   const [pinInputValue, setPinInputValue] = useState('');
   const [showModalPin, setShowModalPin] = useState(false);
   const [showPromptPin, setShowPromptPin] = useState(false);
+  const [isUnlockedBlinking, setIsUnlockedBlinking] = useState(false);
   
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -940,6 +941,7 @@ export default function Home() {
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
                   onClick={() => {
+                    if (activeCollection === col.id) return;
                     if (col.isPrivate && col.pin) {
                       setPinPromptConfig({ collectionId: col.id, action: 'access' });
                       setPinInputValue('');
@@ -999,7 +1001,7 @@ export default function Home() {
         </div>
 
         {/* Center Column: Feed (Scrollable) */}
-        <div className="lg:col-span-6 space-y-4 order-3 lg:order-2">
+        <div className={`lg:col-span-6 space-y-4 order-3 lg:order-2 ${isUnlockedBlinking ? 'animate-border-blink' : ''}`}>
           {loading ? (
             <div className="flex justify-center items-center py-12 gap-2 text-gray-400 font-medium">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -1541,6 +1543,8 @@ export default function Home() {
                     if (col && col.pin === pinInputValue) {
                       if (pinPromptConfig.action === 'access') {
                         setActiveCollection(pinPromptConfig.collectionId);
+                        setIsUnlockedBlinking(true);
+                        setTimeout(() => setIsUnlockedBlinking(false), 1500);
                       } else if (pinPromptConfig.action === 'edit') {
                         setEditCollectionTarget(col);
                         setCollectionInputValue(col.name);
@@ -1580,6 +1584,8 @@ export default function Home() {
                   if (col && col.pin === pinInputValue) {
                     if (pinPromptConfig.action === 'access') {
                       setActiveCollection(pinPromptConfig.collectionId);
+                      setIsUnlockedBlinking(true);
+                      setTimeout(() => setIsUnlockedBlinking(false), 1500);
                     } else if (pinPromptConfig.action === 'edit') {
                       setEditCollectionTarget(col);
                       setCollectionInputValue(col.name);
