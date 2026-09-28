@@ -104,7 +104,6 @@ export default function Home() {
   // Private Collections State
   const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
   const [collectionPin, setCollectionPin] = useState('');
-  const [unlockedCollections, setUnlockedCollections] = useState<Set<string>>(new Set());
   const [pinPromptConfig, setPinPromptConfig] = useState<{ collectionId: string, action: 'access' | 'edit' | 'delete' } | null>(null);
   const [pinInputValue, setPinInputValue] = useState('');
   const [showModalPin, setShowModalPin] = useState(false);
@@ -941,7 +940,7 @@ export default function Home() {
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
                   onClick={() => {
-                    if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                    if (col.isPrivate && col.pin) {
                       setPinPromptConfig({ collectionId: col.id, action: 'access' });
                       setPinInputValue('');
                     } else {
@@ -957,7 +956,7 @@ export default function Home() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                        if (col.isPrivate && col.pin) {
                           setPinPromptConfig({ collectionId: col.id, action: 'edit' });
                           setPinInputValue('');
                         } else {
@@ -975,7 +974,7 @@ export default function Home() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                        if (col.isPrivate && col.pin) {
                           setPinPromptConfig({ collectionId: col.id, action: 'delete' });
                           setPinInputValue('');
                         } else {
@@ -1540,10 +1539,6 @@ export default function Home() {
                   if(e.key === 'Enter') {
                     const col = collections.find(c => c.id === pinPromptConfig.collectionId);
                     if (col && col.pin === pinInputValue) {
-                      const newUnlocked = new Set(unlockedCollections);
-                      newUnlocked.add(pinPromptConfig.collectionId);
-                      setUnlockedCollections(newUnlocked);
-                      
                       if (pinPromptConfig.action === 'access') {
                         setActiveCollection(pinPromptConfig.collectionId);
                       } else if (pinPromptConfig.action === 'edit') {
@@ -1583,10 +1578,6 @@ export default function Home() {
                 onClick={() => {
                   const col = collections.find(c => c.id === pinPromptConfig.collectionId);
                   if (col && col.pin === pinInputValue) {
-                    const newUnlocked = new Set(unlockedCollections);
-                    newUnlocked.add(pinPromptConfig.collectionId);
-                    setUnlockedCollections(newUnlocked);
-                    
                     if (pinPromptConfig.action === 'access') {
                       setActiveCollection(pinPromptConfig.collectionId);
                     } else if (pinPromptConfig.action === 'edit') {
