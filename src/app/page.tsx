@@ -106,6 +106,7 @@ export default function Home() {
   const [collectionPin, setCollectionPin] = useState('');
   const [unlockedCollections, setUnlockedCollections] = useState<Set<string>>(new Set());
   const [pinPromptCollectionId, setPinPromptCollectionId] = useState<string | null>(null);
+  const [pinPromptAction, setPinPromptAction] = useState<'view' | 'edit' | 'delete'>('view');
   const [pinInputValue, setPinInputValue] = useState('');
   
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -940,6 +941,7 @@ export default function Home() {
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
                   onClick={() => {
                     if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                      setPinPromptAction('view');
                       setPinPromptCollectionId(col.id);
                       setPinInputValue('');
                     } else {
@@ -955,11 +957,17 @@ export default function Home() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditCollectionTarget(col);
-                        setCollectionInputValue(col.name);
-                        setIsCollectionPrivate(col.isPrivate || false);
-                        setCollectionPin(col.pin || '');
-                        setShowCollectionModal(true);
+                        if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                          setPinPromptAction('edit');
+                          setPinPromptCollectionId(col.id);
+                          setPinInputValue('');
+                        } else {
+                          setEditCollectionTarget(col);
+                          setCollectionInputValue(col.name);
+                          setIsCollectionPrivate(col.isPrivate || false);
+                          setCollectionPin(col.pin || '');
+                          setShowCollectionModal(true);
+                        }
                       }}
                       className="p-1 text-gray-400 hover:text-indigo-600"
                     >
@@ -968,7 +976,13 @@ export default function Home() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDeleteCollectionTarget(col.id);
+                        if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                          setPinPromptAction('delete');
+                          setPinPromptCollectionId(col.id);
+                          setPinInputValue('');
+                        } else {
+                          setDeleteCollectionTarget(col.id);
+                        }
                       }}
                       className="p-1 text-gray-400 hover:text-red-600"
                     >
@@ -1522,7 +1536,19 @@ export default function Home() {
                     const newUnlocked = new Set(unlockedCollections);
                     newUnlocked.add(pinPromptCollectionId);
                     setUnlockedCollections(newUnlocked);
-                    setActiveCollection(pinPromptCollectionId);
+                    
+                    if (pinPromptAction === 'view') {
+                      setActiveCollection(pinPromptCollectionId);
+                    } else if (pinPromptAction === 'edit') {
+                      setEditCollectionTarget(col);
+                      setCollectionInputValue(col.name);
+                      setIsCollectionPrivate(col.isPrivate || false);
+                      setCollectionPin(col.pin || '');
+                      setShowCollectionModal(true);
+                    } else if (pinPromptAction === 'delete') {
+                      setDeleteCollectionTarget(pinPromptCollectionId);
+                    }
+                    
                     setPinPromptCollectionId(null);
                   } else {
                     showNotification('Incorrect PIN');
@@ -1544,7 +1570,19 @@ export default function Home() {
                     const newUnlocked = new Set(unlockedCollections);
                     newUnlocked.add(pinPromptCollectionId);
                     setUnlockedCollections(newUnlocked);
-                    setActiveCollection(pinPromptCollectionId);
+                    
+                    if (pinPromptAction === 'view') {
+                      setActiveCollection(pinPromptCollectionId);
+                    } else if (pinPromptAction === 'edit') {
+                      setEditCollectionTarget(col);
+                      setCollectionInputValue(col.name);
+                      setIsCollectionPrivate(col.isPrivate || false);
+                      setCollectionPin(col.pin || '');
+                      setShowCollectionModal(true);
+                    } else if (pinPromptAction === 'delete') {
+                      setDeleteCollectionTarget(pinPromptCollectionId);
+                    }
+                    
                     setPinPromptCollectionId(null);
                   } else {
                     showNotification('Incorrect PIN');
