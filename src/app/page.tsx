@@ -1525,21 +1525,24 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setPinPromptConfig(null)}></div>
           <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
-            <div 
-              className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400 cursor-pointer"
-              onDoubleClick={() => {
-                const col = collections.find(c => c.id === pinPromptConfig.collectionId);
-                if (col && col.pin) {
-                  setPinInputValue(col.pin);
-                  setShowPromptPin(true);
-                  showNotification('Developer Override Applied', 'success');
-                }
-              }}
-              title="Double tap to reveal PIN"
-            >
-              <Lock className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 mb-6">
+              <Lock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <h3 
+                className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center select-none"
+                onDoubleClick={() => {
+                  const col = collections.find(c => c.id === pinPromptConfig.collectionId);
+                  if (col && col.pin) {
+                    setPinInputValue(col.pin);
+                    setShowPromptPin(true);
+                  }
+                }}
+              >
+                Enter PIN
+                <span className="text-gray-500 dark:text-gray-400 font-medium text-sm ml-2 truncate max-w-[150px]">
+                  for {collections.find(c => c.id === pinPromptConfig.collectionId)?.name}
+                </span>
+              </h3>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Enter PIN</h3>
             
             <div className="relative mb-6">
               <input 
