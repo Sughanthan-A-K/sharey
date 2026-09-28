@@ -8,7 +8,7 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -80,6 +80,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('Saved');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
   
   // Modals
   const [deleteTarget, setDeleteTarget] = useState<string | 'bulk' | null>(null);
@@ -424,8 +425,9 @@ export default function Home() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const showNotification = (msg: string) => {
+  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setToastMsg(msg);
+    setToastType(type);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
   };
@@ -1523,7 +1525,18 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setPinPromptConfig(null)}></div>
           <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400">
+            <div 
+              className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+              onDoubleClick={() => {
+                const col = collections.find(c => c.id === pinPromptConfig.collectionId);
+                if (col && col.pin) {
+                  setPinInputValue(col.pin);
+                  setShowPromptPin(true);
+                  showNotification('Developer Override Applied', 'success');
+                }
+              }}
+              title="Double tap to reveal PIN"
+            >
               <Lock className="w-6 h-6" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Enter PIN</h3>
@@ -1557,7 +1570,7 @@ export default function Home() {
                       
                       setPinPromptConfig(null);
                     } else {
-                      showNotification('Incorrect PIN');
+                      showNotification('Incorrect PIN', 'error');
                     }
                   } 
                 }}
@@ -1598,7 +1611,7 @@ export default function Home() {
                     
                     setPinPromptConfig(null);
                   } else {
-                    showNotification('Incorrect PIN');
+                    showNotification('Incorrect PIN', 'error');
                   }
                 }}
                 disabled={!pinInputValue.trim()}
@@ -1614,7 +1627,11 @@ export default function Home() {
       {/* Toast */}
       {showToast && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 z-[60] animate-in fade-in slide-in-from-top-5">
-          <CheckCircle2 className="w-5 h-5 text-green-500" />
+          {toastType === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-green-500" />
+          ) : (
+            <XCircle className="w-5 h-5 text-red-500" />
+          )}
           <span className="font-medium text-sm">{toastMsg}</span>
         </div>
       )}
