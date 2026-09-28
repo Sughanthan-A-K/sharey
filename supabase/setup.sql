@@ -82,4 +82,8 @@ CREATE POLICY "Users can update their own collections" ON public.collections FOR
 CREATE POLICY "Users can delete their own collections" ON public.collections FOR DELETE USING (auth.uid() = user_id);
 
 -- Add collection_id to shared_items
-ALTER TABLE public.shared_items ADD COLUMN collection_id UUID REFERENCES public.collections(id) ON DELETE SET NULL;
+ALTER TABLE public.shared_items ADD COLUMN IF NOT EXISTS collection_id UUID REFERENCES public.collections(id) ON DELETE SET NULL;
+
+-- 7. Private Collections
+ALTER TABLE public.collections ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.collections ADD COLUMN IF NOT EXISTS pin TEXT;

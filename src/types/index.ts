@@ -3,6 +3,8 @@ export type ItemType = 'text' | 'link' | 'image' | 'video' | 'file';
 export interface Collection {
   id: string;
   name: string;
+  isPrivate?: boolean;
+  pin?: string;
   createdAt: Date;
 }
 

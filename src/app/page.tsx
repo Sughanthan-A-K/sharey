@@ -8,7 +8,7 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -100,6 +100,13 @@ export default function Home() {
   const [selectedCollectionForUpload, setSelectedCollectionForUpload] = useState<string | null>(null);
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null);
+  
+  // Private Collections State
+  const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
+  const [collectionPin, setCollectionPin] = useState('');
+  const [unlockedCollections, setUnlockedCollections] = useState<Set<string>>(new Set());
+  const [pinPromptCollectionId, setPinPromptCollectionId] = useState<string | null>(null);
+  const [pinInputValue, setPinInputValue] = useState('');
   
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -220,6 +227,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    setSelectedCollectionForUpload(activeCollection);
+  }, [activeCollection]);
+
+  useEffect(() => {
     if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -248,6 +259,8 @@ export default function Home() {
       setCollections(collectionsData.map(c => ({
         id: c.id,
         name: c.name,
+        isPrivate: c.is_private,
+        pin: c.pin,
         createdAt: new Date(c.created_at)
       })));
     }
@@ -281,7 +294,11 @@ export default function Home() {
     if (editCollectionTarget) {
       const { error } = await supabase
         .from('collections')
-        .update({ name: collectionInputValue.trim() })
+        .update({ 
+          name: collectionInputValue.trim(),
+          is_private: isCollectionPrivate,
+          pin: collectionPin.trim() || null
+        })
         .eq('id', editCollectionTarget.id);
       
       if (error) {
@@ -294,7 +311,12 @@ export default function Home() {
     } else {
       const { error } = await supabase
         .from('collections')
-        .insert({ user_id: user.id, name: collectionInputValue.trim() });
+        .insert({ 
+          user_id: user.id, 
+          name: collectionInputValue.trim(),
+          is_private: isCollectionPrivate,
+          pin: collectionPin.trim() || null
+        });
       
       if (error) {
         showNotification(error.message);
@@ -628,7 +650,18 @@ export default function Home() {
     const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
     const matchesSearch = item.content.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (item.fileName && item.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCollection = activeCollection ? item.collectionId === activeCollection : true;
+    
+    let matchesCollection = true;
+    if (activeCollection) {
+      matchesCollection = item.collectionId === activeCollection;
+    } else {
+      // In "All Items", hide items that belong to a private collection
+      const parentCol = collections.find(c => c.id === item.collectionId);
+      if (parentCol?.isPrivate) {
+        matchesCollection = false;
+      }
+    }
+    
     return matchesFilter && matchesSearch && matchesCollection;
   });
 
@@ -867,6 +900,8 @@ export default function Home() {
                 onClick={() => {
                   setEditCollectionTarget(null);
                   setCollectionInputValue('');
+                  setIsCollectionPrivate(false);
+                  setCollectionPin('');
                   setShowCollectionModal(true);
                 }}
                 className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
@@ -902,15 +937,27 @@ export default function Home() {
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
-                  onClick={() => setActiveCollection(col.id)}
+                  onClick={() => {
+                    if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
+                      setPinPromptCollectionId(col.id);
+                      setPinInputValue('');
+                    } else {
+                      setActiveCollection(col.id);
+                    }
+                  }}
                 >
-                  <span className="truncate pr-2">{col.name}</span>
+                  <div className="flex items-center gap-2 truncate pr-2">
+                    {col.isPrivate && <Lock className="w-3.5 h-3.5 text-gray-400" />}
+                    <span className="truncate">{col.name}</span>
+                  </div>
                   <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditCollectionTarget(col);
                         setCollectionInputValue(col.name);
+                        setIsCollectionPrivate(col.isPrivate || false);
+                        setCollectionPin(col.pin || '');
                         setShowCollectionModal(true);
                       }}
                       className="p-1 text-gray-400 hover:text-indigo-600"
@@ -1369,11 +1416,38 @@ export default function Home() {
               value={collectionInputValue}
               onChange={e => setCollectionInputValue(e.target.value)}
               placeholder="Collection Name"
-              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-6 text-gray-900 dark:text-gray-100"
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-4 text-gray-900 dark:text-gray-100"
               autoFocus
               onKeyDown={e => { if(e.key === 'Enter') handleSaveCollection() }}
             />
-            <div className="flex justify-end gap-3">
+
+            <label className="flex items-center gap-2 mb-4 cursor-pointer text-gray-700 dark:text-gray-300">
+              <input 
+                type="checkbox" 
+                checked={isCollectionPrivate}
+                onChange={(e) => {
+                  setIsCollectionPrivate(e.target.checked);
+                  if (!e.target.checked) setCollectionPin('');
+                }}
+                className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 accent-indigo-600"
+              />
+              <span className="text-sm font-medium">Private Collection (Hide from All Items)</span>
+            </label>
+
+            {isCollectionPrivate && (
+              <div className="mb-6 animate-in slide-in-from-top-2">
+                <input 
+                  type="password"
+                  value={collectionPin}
+                  onChange={e => setCollectionPin(e.target.value)}
+                  placeholder="Optional PIN (e.g. 1234)"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100"
+                  onKeyDown={e => { if(e.key === 'Enter') handleSaveCollection() }}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-2">
               <button 
                 onClick={() => setShowCollectionModal(false)}
                 className="px-4 py-2 font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
@@ -1416,6 +1490,67 @@ export default function Home() {
                 className="flex-1 px-4 py-2.5 font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Prompt Modal */}
+      {pinPromptCollectionId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setPinPromptCollectionId(null)}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Enter PIN</h3>
+            <input 
+              type="password"
+              value={pinInputValue}
+              onChange={e => setPinInputValue(e.target.value)}
+              placeholder="Enter PIN"
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-6 text-gray-900 dark:text-gray-100"
+              autoFocus
+              onKeyDown={e => { 
+                if(e.key === 'Enter') {
+                  const col = collections.find(c => c.id === pinPromptCollectionId);
+                  if (col && col.pin === pinInputValue) {
+                    const newUnlocked = new Set(unlockedCollections);
+                    newUnlocked.add(pinPromptCollectionId);
+                    setUnlockedCollections(newUnlocked);
+                    setActiveCollection(pinPromptCollectionId);
+                    setPinPromptCollectionId(null);
+                  } else {
+                    showNotification('Incorrect PIN');
+                  }
+                } 
+              }}
+            />
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setPinPromptCollectionId(null)}
+                className="flex-1 px-4 py-2.5 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  const col = collections.find(c => c.id === pinPromptCollectionId);
+                  if (col && col.pin === pinInputValue) {
+                    const newUnlocked = new Set(unlockedCollections);
+                    newUnlocked.add(pinPromptCollectionId);
+                    setUnlockedCollections(newUnlocked);
+                    setActiveCollection(pinPromptCollectionId);
+                    setPinPromptCollectionId(null);
+                  } else {
+                    showNotification('Incorrect PIN');
+                  }
+                }}
+                disabled={!pinInputValue.trim()}
+                className="flex-1 px-4 py-2.5 font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5 disabled:opacity-50"
+              >
+                Unlock
               </button>
             </div>
           </div>
