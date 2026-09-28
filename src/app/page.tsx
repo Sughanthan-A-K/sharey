@@ -99,7 +99,7 @@ export default function Home() {
   const [deleteCollectionTarget, setDeleteCollectionTarget] = useState<string | null>(null);
   const [selectedCollectionForUpload, setSelectedCollectionForUpload] = useState<string | null>(null);
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
-  const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null);
+  const [dragOverCollectionId, setDragOverCollectionId] = useState<string | 'all' | null>(null);
   
   // Private Collections State
   const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
@@ -354,8 +354,9 @@ export default function Home() {
 
   const handleDragOver = (e: React.DragEvent, collectionId: string | null) => {
     e.preventDefault();
-    if (dragOverCollectionId !== collectionId) {
-      setDragOverCollectionId(collectionId);
+    const targetId = collectionId === null ? 'all' : collectionId;
+    if (dragOverCollectionId !== targetId) {
+      setDragOverCollectionId(targetId);
     }
   };
 
@@ -921,7 +922,7 @@ export default function Home() {
                   activeCollection === null
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                } ${dragOverCollectionId === null ? 'ring-2 ring-indigo-400 border-transparent bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
+                } ${dragOverCollectionId === 'all' ? 'ring-2 ring-indigo-400 border-transparent bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
               >
                 All Items
               </button>
