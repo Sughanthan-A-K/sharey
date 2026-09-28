@@ -101,11 +101,9 @@ export default function Home() {
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<string | null>(null);
   
-  // Private Collections State
   const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
   const [collectionPin, setCollectionPin] = useState('');
   const [unlockedCollections, setUnlockedCollections] = useState<Set<string>>(new Set());
-  const [pinPromptCollectionId, setPinPromptCollectionId] = useState<string | null>(null);
   const [pinInputValue, setPinInputValue] = useState('');
   
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -938,12 +936,8 @@ export default function Home() {
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
                   onClick={() => {
-                    if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
-                      setPinPromptCollectionId(col.id);
-                      setPinInputValue('');
-                    } else {
-                      setActiveCollection(col.id);
-                    }
+                    setActiveCollection(col.id);
+                    setPinInputValue('');
                   }}
                 >
                   <div className="flex items-center gap-2 truncate pr-2">
@@ -988,21 +982,82 @@ export default function Home() {
 
         {/* Center Column: Feed (Scrollable) */}
         <div className="lg:col-span-6 space-y-4 order-3 lg:order-2">
-          {loading ? (
-            <div className="flex justify-center items-center py-12 gap-2 text-gray-400 font-medium">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Loading items...
-            </div>
-          ) : filteredItems.length === 0 ? (
-            <div className="text-center py-12 px-4 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
-              <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="w-6 h-6 text-gray-400 dark:text-gray-500" />
-              </div>
-              <p className="font-medium text-gray-900 dark:text-gray-100">Nothing saved yet</p>
-              <p className="text-sm mt-1">Paste something or attach files to get started.</p>
-            </div>
-          ) : (
-            filteredItems.map(item => (
+          {(() => {
+            const activeColObj = collections.find(c => c.id === activeCollection);
+            const isLocked = activeColObj?.isPrivate && activeColObj?.pin && !unlockedCollections.has(activeColObj.id);
+
+            if (isLocked) {
+              return (
+                <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-sm border border-gray-200 dark:border-gray-800 p-8 mx-auto mt-12 text-center">
+                  <div className="w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400">
+                    <Lock className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Locked Collection</h3>
+                  <p className="text-sm text-gray-500 mb-6">Enter PIN to view items in {activeColObj.name}</p>
+                  
+                  <input 
+                    type="password"
+                    value={pinInputValue}
+                    onChange={e => setPinInputValue(e.target.value)}
+                    placeholder="Enter PIN"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-4 text-gray-900 dark:text-gray-100 text-center text-lg tracking-widest"
+                    autoFocus
+                    onKeyDown={e => { 
+                      if(e.key === 'Enter') {
+                        if (activeColObj.pin === pinInputValue) {
+                          const newUnlocked = new Set(unlockedCollections);
+                          newUnlocked.add(activeColObj.id);
+                          setUnlockedCollections(newUnlocked);
+                          setPinInputValue('');
+                        } else {
+                          showNotification('Incorrect PIN');
+                        }
+                      } 
+                    }}
+                  />
+                  
+                  <button 
+                    onClick={() => {
+                      if (activeColObj.pin === pinInputValue) {
+                        const newUnlocked = new Set(unlockedCollections);
+                        newUnlocked.add(activeColObj.id);
+                        setUnlockedCollections(newUnlocked);
+                        setPinInputValue('');
+                      } else {
+                        showNotification('Incorrect PIN');
+                      }
+                    }}
+                    disabled={!pinInputValue.trim()}
+                    className="w-full px-4 py-3 font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow disabled:opacity-50"
+                  >
+                    Unlock
+                  </button>
+                </div>
+              );
+            }
+
+            if (loading) {
+              return (
+                <div className="flex justify-center items-center py-12 gap-2 text-gray-400 font-medium">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Loading items...
+                </div>
+              );
+            }
+
+            if (filteredItems.length === 0) {
+              return (
+                <div className="text-center py-12 px-4 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                  <div className="w-16 h-16 bg-gray-50 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Search className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                  </div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Nothing saved yet</p>
+                  <p className="text-sm mt-1">Paste something or attach files to get started.</p>
+                </div>
+              );
+            }
+
+            return filteredItems.map(item => (
               <div 
                 key={item.id} 
                 draggable
@@ -1119,8 +1174,8 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            ))
-          )}
+            ));
+          })()}
         </div>
       </div>
 
@@ -1496,66 +1551,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* PIN Prompt Modal */}
-      {pinPromptCollectionId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-gray-50 dark:bg-gray-950" onClick={() => setPinPromptCollectionId(null)}></div>
-          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400">
-              <Lock className="w-6 h-6" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Enter PIN</h3>
-            <input 
-              type="password"
-              value={pinInputValue}
-              onChange={e => setPinInputValue(e.target.value)}
-              placeholder="Enter PIN"
-              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-6 text-gray-900 dark:text-gray-100"
-              autoFocus
-              onKeyDown={e => { 
-                if(e.key === 'Enter') {
-                  const col = collections.find(c => c.id === pinPromptCollectionId);
-                  if (col && col.pin === pinInputValue) {
-                    const newUnlocked = new Set(unlockedCollections);
-                    newUnlocked.add(pinPromptCollectionId);
-                    setUnlockedCollections(newUnlocked);
-                    setActiveCollection(pinPromptCollectionId);
-                    setPinPromptCollectionId(null);
-                  } else {
-                    showNotification('Incorrect PIN');
-                  }
-                } 
-              }}
-            />
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setPinPromptCollectionId(null)}
-                className="flex-1 px-4 py-2.5 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  const col = collections.find(c => c.id === pinPromptCollectionId);
-                  if (col && col.pin === pinInputValue) {
-                    const newUnlocked = new Set(unlockedCollections);
-                    newUnlocked.add(pinPromptCollectionId);
-                    setUnlockedCollections(newUnlocked);
-                    setActiveCollection(pinPromptCollectionId);
-                    setPinPromptCollectionId(null);
-                  } else {
-                    showNotification('Incorrect PIN');
-                  }
-                }}
-                disabled={!pinInputValue.trim()}
-                className="flex-1 px-4 py-2.5 font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5 disabled:opacity-50"
-              >
-                Unlock
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Toast */}
       {showToast && (
