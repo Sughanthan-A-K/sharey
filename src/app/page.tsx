@@ -111,6 +111,9 @@ export default function Home() {
   const [showPromptPin, setShowPromptPin] = useState(false);
   const [isUnlockedBlinking, setIsUnlockedBlinking] = useState(false);
   
+  // File Preview
+  const [previewItem, setPreviewItem] = useState<SharedItem | null>(null);
+  
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -978,6 +981,18 @@ export default function Home() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
+                        const link = `${window.location.origin}/c/${col.id}`;
+                        navigator.clipboard.writeText(link);
+                        showNotification('Collection link copied to clipboard!', 'success');
+                      }}
+                      className="p-1 text-gray-400 hover:text-green-600"
+                      title="Copy public link"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (col.isPrivate && col.pin) {
                           setPinPromptConfig({ collectionId: col.id, action: 'delete' });
                           setPinInputValue('');
@@ -1068,7 +1083,14 @@ export default function Home() {
                     <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{item.content}</p>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-3">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 -ml-2 rounded-xl transition-colors"
+                        onClick={() => {
+                          if (item.fileUrl && item.type !== 'video') {
+                            setPreviewItem(item);
+                          }
+                        }}
+                      >
                         <div className="min-w-0 flex-1">
                           <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-[15px]">{item.fileName || item.content}</p>
                           {item.fileSize && <p className="text-xs text-gray-500 dark:text-gray-400">{item.fileSize}</p>}
@@ -1077,12 +1099,15 @@ export default function Home() {
 
                       {/* Actual Image / Video */}
                       {item.fileUrl && item.type === 'image' && (
-                         <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800">
+                         <div 
+                           className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer"
+                           onClick={() => setPreviewItem(item)}
+                         >
                            {/* eslint-disable-next-line @next/next/no-img-element */}
                            <img 
                             src={item.fileUrl} 
                             alt={item.fileName || 'Image'} 
-                            className="w-full h-auto max-h-[500px] object-contain bg-gray-50 dark:bg-gray-950" 
+                            className="w-full h-auto max-h-[500px] object-contain bg-gray-50 dark:bg-gray-950 transition-transform hover:scale-[1.02]" 
                             loading="lazy" 
                            />
                          </div>
@@ -1636,6 +1661,47 @@ export default function Home() {
             <XCircle className="w-5 h-5 text-red-500" />
           )}
           <span className="font-medium text-sm">{toastMsg}</span>
+        </div>
+      )}
+
+      {/* File Preview Modal */}
+      {previewItem && previewItem.fileUrl && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setPreviewItem(null)}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-5xl max-h-[90vh] shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{previewItem.fileName || 'Preview'}</h3>
+              <div className="flex items-center gap-2">
+                <a 
+                  href={previewItem.fileUrl} 
+                  download={previewItem.fileName} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-5 h-5" />
+                </a>
+                <button 
+                  onClick={() => setPreviewItem(null)}
+                  className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-gray-50 dark:bg-black p-4 flex items-center justify-center">
+              {previewItem.type === 'image' ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewItem.fileUrl} alt={previewItem.fileName || ''} className="max-w-full max-h-full object-contain" />
+              ) : previewItem.type === 'video' ? (
+                <video src={previewItem.fileUrl} controls playsInline className="max-w-full max-h-full" />
+              ) : (
+                <iframe src={previewItem.fileUrl} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
+              )}
+            </div>
+          </div>
         </div>
       )}
 
