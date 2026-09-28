@@ -8,7 +8,7 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal, Lock
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -105,9 +105,10 @@ export default function Home() {
   const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
   const [collectionPin, setCollectionPin] = useState('');
   const [unlockedCollections, setUnlockedCollections] = useState<Set<string>>(new Set());
-  const [pinPromptCollectionId, setPinPromptCollectionId] = useState<string | null>(null);
-  const [pinPromptAction, setPinPromptAction] = useState<'view' | 'edit' | 'delete'>('view');
+  const [pinPromptConfig, setPinPromptConfig] = useState<{ collectionId: string, action: 'access' | 'edit' | 'delete' } | null>(null);
   const [pinInputValue, setPinInputValue] = useState('');
+  const [showModalPin, setShowModalPin] = useState(false);
+  const [showPromptPin, setShowPromptPin] = useState(false);
   
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -941,8 +942,7 @@ export default function Home() {
                   } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
                   onClick={() => {
                     if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
-                      setPinPromptAction('view');
-                      setPinPromptCollectionId(col.id);
+                      setPinPromptConfig({ collectionId: col.id, action: 'access' });
                       setPinInputValue('');
                     } else {
                       setActiveCollection(col.id);
@@ -958,8 +958,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
-                          setPinPromptAction('edit');
-                          setPinPromptCollectionId(col.id);
+                          setPinPromptConfig({ collectionId: col.id, action: 'edit' });
                           setPinInputValue('');
                         } else {
                           setEditCollectionTarget(col);
@@ -977,8 +976,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (col.isPrivate && col.pin && !unlockedCollections.has(col.id)) {
-                          setPinPromptAction('delete');
-                          setPinPromptCollectionId(col.id);
+                          setPinPromptConfig({ collectionId: col.id, action: 'delete' });
                           setPinInputValue('');
                         } else {
                           setDeleteCollectionTarget(col.id);
@@ -1450,16 +1448,23 @@ export default function Home() {
             </label>
 
             {isCollectionPrivate && (
-              <div className="mb-6 animate-in slide-in-from-top-2">
+              <div className="relative mb-6 animate-in slide-in-from-top-2">
                 <input 
-                  type="password"
+                  type={showModalPin ? "text" : "password"}
                   value={collectionPin}
                   onChange={e => setCollectionPin(e.target.value)}
                   placeholder="Optional PIN (e.g. 1234)"
                   autoComplete="new-password"
-                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100"
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100 pr-12"
                   onKeyDown={e => { if(e.key === 'Enter') handleSaveCollection() }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowModalPin(!showModalPin)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  {showModalPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             )}
 
@@ -1513,77 +1518,88 @@ export default function Home() {
       )}
 
       {/* PIN Prompt Modal */}
-      {pinPromptCollectionId && (
+      {pinPromptConfig && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setPinPromptCollectionId(null)}></div>
+          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setPinPromptConfig(null)}></div>
           <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-sm shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
             <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400">
               <Lock className="w-6 h-6" />
             </div>
             <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Enter PIN</h3>
-            <input 
-              type="password"
-              value={pinInputValue}
-              onChange={e => setPinInputValue(e.target.value)}
-              placeholder="Enter PIN"
-              autoComplete="new-password"
-              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 mb-6 text-gray-900 dark:text-gray-100"
-              autoFocus
-              onKeyDown={e => { 
-                if(e.key === 'Enter') {
-                  const col = collections.find(c => c.id === pinPromptCollectionId);
-                  if (col && col.pin === pinInputValue) {
-                    const newUnlocked = new Set(unlockedCollections);
-                    newUnlocked.add(pinPromptCollectionId);
-                    setUnlockedCollections(newUnlocked);
-                    
-                    if (pinPromptAction === 'view') {
-                      setActiveCollection(pinPromptCollectionId);
-                    } else if (pinPromptAction === 'edit') {
-                      setEditCollectionTarget(col);
-                      setCollectionInputValue(col.name);
-                      setIsCollectionPrivate(col.isPrivate || false);
-                      setCollectionPin(col.pin || '');
-                      setShowCollectionModal(true);
-                    } else if (pinPromptAction === 'delete') {
-                      setDeleteCollectionTarget(pinPromptCollectionId);
+            
+            <div className="relative mb-6">
+              <input 
+                type={showPromptPin ? "text" : "password"}
+                value={pinInputValue}
+                onChange={e => setPinInputValue(e.target.value)}
+                placeholder="Enter PIN"
+                autoComplete="new-password"
+                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 text-gray-900 dark:text-gray-100 pr-12"
+                autoFocus
+                onKeyDown={e => { 
+                  if(e.key === 'Enter') {
+                    const col = collections.find(c => c.id === pinPromptConfig.collectionId);
+                    if (col && col.pin === pinInputValue) {
+                      const newUnlocked = new Set(unlockedCollections);
+                      newUnlocked.add(pinPromptConfig.collectionId);
+                      setUnlockedCollections(newUnlocked);
+                      
+                      if (pinPromptConfig.action === 'access') {
+                        setActiveCollection(pinPromptConfig.collectionId);
+                      } else if (pinPromptConfig.action === 'edit') {
+                        setEditCollectionTarget(col);
+                        setCollectionInputValue(col.name);
+                        setIsCollectionPrivate(col.isPrivate || false);
+                        setCollectionPin(col.pin || '');
+                        setShowCollectionModal(true);
+                      } else if (pinPromptConfig.action === 'delete') {
+                        setDeleteCollectionTarget(col.id);
+                      }
+                      
+                      setPinPromptConfig(null);
+                    } else {
+                      showNotification('Incorrect PIN');
                     }
-                    
-                    setPinPromptCollectionId(null);
-                  } else {
-                    showNotification('Incorrect PIN');
-                  }
-                } 
-              }}
-            />
+                  } 
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPromptPin(!showPromptPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                {showPromptPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
             <div className="flex gap-3">
               <button 
-                onClick={() => setPinPromptCollectionId(null)}
+                onClick={() => setPinPromptConfig(null)}
                 className="flex-1 px-4 py-2.5 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors"
               >
                 Cancel
               </button>
               <button 
                 onClick={() => {
-                  const col = collections.find(c => c.id === pinPromptCollectionId);
+                  const col = collections.find(c => c.id === pinPromptConfig.collectionId);
                   if (col && col.pin === pinInputValue) {
                     const newUnlocked = new Set(unlockedCollections);
-                    newUnlocked.add(pinPromptCollectionId);
+                    newUnlocked.add(pinPromptConfig.collectionId);
                     setUnlockedCollections(newUnlocked);
                     
-                    if (pinPromptAction === 'view') {
-                      setActiveCollection(pinPromptCollectionId);
-                    } else if (pinPromptAction === 'edit') {
+                    if (pinPromptConfig.action === 'access') {
+                      setActiveCollection(pinPromptConfig.collectionId);
+                    } else if (pinPromptConfig.action === 'edit') {
                       setEditCollectionTarget(col);
                       setCollectionInputValue(col.name);
                       setIsCollectionPrivate(col.isPrivate || false);
                       setCollectionPin(col.pin || '');
                       setShowCollectionModal(true);
-                    } else if (pinPromptAction === 'delete') {
-                      setDeleteCollectionTarget(pinPromptCollectionId);
+                    } else if (pinPromptConfig.action === 'delete') {
+                      setDeleteCollectionTarget(col.id);
                     }
                     
-                    setPinPromptCollectionId(null);
+                    setPinPromptConfig(null);
                   } else {
                     showNotification('Incorrect PIN');
                   }
