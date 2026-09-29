@@ -8,7 +8,7 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -101,6 +101,7 @@ export default function Home() {
   const [selectedCollectionForUpload, setSelectedCollectionForUpload] = useState<string | null>(null);
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<string | 'all' | null>(null);
+  const [isUploadDropdownOpen, setIsUploadDropdownOpen] = useState(false);
   
   // Private Collections State
   const [isCollectionPrivate, setIsCollectionPrivate] = useState(false);
@@ -823,17 +824,48 @@ export default function Home() {
             <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors gap-2">
               <div className="flex items-center gap-1 min-w-0">
                 {collections.length > 0 && (
-                  <select
-                    value={selectedCollectionForUpload || ''}
-                    onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
-                    disabled={uploading}
-                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500 truncate max-w-[120px] lg:max-w-[140px]"
-                  >
-                    <option value="">No Collection</option>
-                    {collections.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <button 
+                      onClick={() => setIsUploadDropdownOpen(!isUploadDropdownOpen)}
+                      disabled={uploading}
+                      className="flex items-center gap-1.5 bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 focus:border-indigo-400 dark:focus:border-indigo-500 transition-colors disabled:opacity-50"
+                    >
+                      <span className="truncate max-w-[100px] lg:max-w-[120px]">
+                        {selectedCollectionForUpload ? collections.find(c => c.id === selectedCollectionForUpload)?.name : 'No Collection'}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                    </button>
+                    
+                    {isUploadDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsUploadDropdownOpen(false)}></div>
+                        <div className="absolute left-0 bottom-full mb-1 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg shadow-black/5 z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-bottom-2">
+                          <button
+                            onClick={() => {
+                              setSelectedCollectionForUpload(null);
+                              setIsUploadDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!selectedCollectionForUpload ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-gray-700 dark:text-gray-300'}`}
+                          >
+                            No Collection
+                          </button>
+                          {collections.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => {
+                                setSelectedCollectionForUpload(c.id);
+                                setIsUploadDropdownOpen(false);
+                              }}
+                              className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${selectedCollectionForUpload === c.id ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-gray-700 dark:text-gray-300'}`}
+                            >
+                              {c.isPrivate ? <Lock className="w-3.5 h-3.5 shrink-0 opacity-50" /> : <Folder className="w-3.5 h-3.5 shrink-0 opacity-50" />}
+                              <span className="truncate">{c.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
                 <button 
                   onClick={() => fileInputRef.current?.click()}
