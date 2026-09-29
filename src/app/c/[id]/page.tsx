@@ -199,16 +199,16 @@ export default function PublicCollectionPage() {
                 key={item.id} 
                 className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-sm transition-all"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-lg">
+                <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-lg shrink-0">
                       {getIconForType(item.type)}
                     </div>
-                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider">
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
                       {item.type}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
+                  <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap shrink-0 pt-1">
                     {format(item.createdAt, 'MMM d · h:mm a')}
                   </div>
                 </div>

@@ -1052,9 +1052,9 @@ export default function Home() {
               >
                 
                 {/* Header with Icon */}
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center cursor-pointer">
+                <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <label className="flex items-center cursor-pointer shrink-0">
                       <input 
                         type="checkbox" 
                         checked={selectedItems.has(item.id)}
@@ -1062,20 +1062,20 @@ export default function Home() {
                         className="w-5 h-5 rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
                       />
                     </label>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-lg">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-lg shrink-0">
                       {getIconForType(item.type)}
                     </div>
-                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider">
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
                       {item.type}
                     </span>
                     {item.collectionId && collections.find(c => c.id === item.collectionId) && (
-                      <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md flex items-center gap-1">
-                        <Folder className="w-3 h-3" />
-                        {collections.find(c => c.id === item.collectionId)?.name}
+                      <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap max-w-[120px] sm:max-w-[200px] truncate">
+                        <Folder className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{collections.find(c => c.id === item.collectionId)?.name}</span>
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
+                  <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap shrink-0 pt-1">
                     {format(item.createdAt, 'MMM d · h:mm a')}
                   </div>
                 </div>
