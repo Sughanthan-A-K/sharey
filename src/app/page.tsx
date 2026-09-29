@@ -857,11 +857,14 @@ export default function Home() {
               <button 
                 onClick={handleSharey}
                 disabled={(!inputValue.trim() && attachedFiles.length === 0) || uploading}
-                className="flex items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-5 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
+                className="flex shrink-0 items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
               >
-                {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{uploading ? 'Uploading...' : 'SHAREY'}</span>
-                {!uploading && <Send className="w-4 h-4" />}
+                {uploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'SHARE'}</span>
               </button>
             </div>
           </div>
@@ -919,19 +922,22 @@ export default function Home() {
               </button>
             </div>
             
-            <div className="space-y-1">
+            <div className="space-y-1 mt-3">
               <button
                 onClick={() => setActiveCollection(null)}
                 onDragOver={(e) => handleDragOver(e, null)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDropToCollection(e, null)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   activeCollection === null
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 } ${dragOverCollectionId === 'all' ? 'ring-2 ring-indigo-400 border-transparent bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
               >
-                All Items
+                <div className="flex items-center gap-2.5 truncate">
+                  <Folder className="w-4 h-4 text-gray-400" />
+                  <span className="truncate">All Items</span>
+                </div>
               </button>
               
               {collections.map(col => (
@@ -940,7 +946,7 @@ export default function Home() {
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDropToCollection(e, col.id)}
-                  className={`group w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                  className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
                     activeCollection === col.id
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -955,8 +961,12 @@ export default function Home() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-2 truncate pr-2">
-                    {col.isPrivate && <Lock className="w-3.5 h-3.5 text-gray-400" />}
+                  <div className="flex items-center gap-2.5 truncate pr-2">
+                    {col.isPrivate ? (
+                      <Lock className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <Folder className="w-4 h-4 text-gray-400" />
+                    )}
                     <span className="truncate">{col.name}</span>
                   </div>
                   <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1127,24 +1137,24 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="pl-8 flex flex-wrap gap-2">
+                <div className="pl-8 flex flex-wrap items-center gap-2">
                   {(item.type === 'text' || item.type === 'link') ? (
                     <button onClick={() => handleCopy(item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                      <Copy className="w-3.5 h-3.5" /> Copy
+                      <Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy</span>
                     </button>
                   ) : (
                     <>
                       {item.fileUrl && (
                         <a href={item.fileUrl} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
-                          <Download className="w-3.5 h-3.5" /> Download
+                          <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Download</span>
                         </a>
                       )}
                       <button onClick={() => handleCopy(item.fileUrl || item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                        <LinkIcon className="w-3.5 h-3.5" /> Copy Link
+                        <LinkIcon className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy Link</span>
                       </button>
                     </>
                   )}
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-2 sm:ml-auto">
                     <button onClick={() => {
                       setEditTarget(item);
                       setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
@@ -1152,10 +1162,10 @@ export default function Home() {
                       setEditFileRemoved(false);
                       setEditItemCollectionId(item.collectionId || null);
                     }} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
-                      <Edit2 className="w-3.5 h-3.5" /> Edit
+                      <Edit2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Edit</span>
                     </button>
                     <button onClick={() => setDeleteTarget(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                      <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
                     </button>
                   </div>
                 </div>

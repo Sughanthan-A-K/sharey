@@ -272,7 +272,7 @@ export default function PublicCollectionPage() {
                 {item.fileUrl && (
                   <div className="pl-10">
                     <a href={item.fileUrl} download={item.fileName} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
-                      <Download className="w-3.5 h-3.5" /> Download
+                      <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Download</span>
                     </a>
                   </div>
                 )}
