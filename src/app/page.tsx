@@ -820,14 +820,14 @@ export default function Home() {
               </div>
             )}
 
-            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 justify-between items-center transition-colors">
-              <div className="flex flex-wrap items-center gap-1">
+            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors gap-2">
+              <div className="flex items-center gap-1 min-w-0">
                 {collections.length > 0 && (
                   <select
                     value={selectedCollectionForUpload || ''}
                     onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
                     disabled={uploading}
-                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500 max-w-[150px] sm:max-w-none truncate"
+                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500 truncate max-w-[120px] lg:max-w-[140px]"
                   >
                     <option value="">No Collection</option>
                     {collections.map(c => (
@@ -838,33 +838,33 @@ export default function Home() {
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors font-medium text-sm disabled:opacity-50"
+                  className="flex shrink-0 items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 px-2 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors font-medium text-sm disabled:opacity-50"
                 >
                   <Paperclip className="w-4 h-4" />
-                  <span>Attach</span>
+                  <span className="hidden xl:inline">Attach</span>
                 </button>
                 {(attachedFiles.length > 0 || inputValue.trim().length > 0) && (
                   <button 
                     onClick={() => { setAttachedFiles([]); setInputValue(''); }}
                     disabled={uploading}
-                    className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium text-sm disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium text-sm disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4" />
-                    <span>Clear</span>
+                    <span className="hidden xl:inline">Clear</span>
                   </button>
                 )}
               </div>
               <button 
                 onClick={handleSharey}
                 disabled={(!inputValue.trim() && attachedFiles.length === 0) || uploading}
-                className="flex items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-5 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95 ml-auto"
+                className="flex shrink-0 items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
               >
                 {uploading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-                <span>{uploading ? 'Uploading...' : 'SHARE'}</span>
+                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'SHARE'}</span>
               </button>
             </div>
           </div>
