@@ -783,7 +783,7 @@ export default function Home() {
         
         {/* Left Column: Composer (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-28 order-1">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20">
             <textarea 
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -821,7 +821,7 @@ export default function Home() {
               </div>
             )}
 
-            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors gap-2">
+            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors gap-2 rounded-b-2xl">
               <div className="flex items-center gap-1 min-w-0">
                 {collections.length > 0 && (
                   <div className="relative">
