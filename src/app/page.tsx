@@ -839,7 +839,7 @@ export default function Home() {
                     {isUploadDropdownOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setIsUploadDropdownOpen(false)}></div>
-                        <div className="absolute left-0 bottom-full mb-1 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg shadow-black/5 z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg shadow-black/5 z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
                           <button
                             onClick={() => {
                               setSelectedCollectionForUpload(null);
