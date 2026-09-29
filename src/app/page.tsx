@@ -820,14 +820,14 @@ export default function Home() {
               </div>
             )}
 
-            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors">
+            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 justify-between items-center transition-colors">
               <div className="flex flex-wrap items-center gap-1">
                 {collections.length > 0 && (
                   <select
                     value={selectedCollectionForUpload || ''}
                     onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
                     disabled={uploading}
-                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500"
+                    className="bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:border-indigo-400 dark:focus:border-indigo-500 max-w-[150px] sm:max-w-none truncate"
                   >
                     <option value="">No Collection</option>
                     {collections.map(c => (
@@ -841,7 +841,7 @@ export default function Home() {
                   className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 px-3 py-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors font-medium text-sm disabled:opacity-50"
                 >
                   <Paperclip className="w-4 h-4" />
-                  <span className="hidden sm:inline">Attach</span>
+                  <span>Attach</span>
                 </button>
                 {(attachedFiles.length > 0 || inputValue.trim().length > 0) && (
                   <button 
@@ -850,21 +850,21 @@ export default function Home() {
                     className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium text-sm disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4" />
-                    <span className="hidden sm:inline">Clear</span>
+                    <span>Clear</span>
                   </button>
                 )}
               </div>
               <button 
                 onClick={handleSharey}
                 disabled={(!inputValue.trim() && attachedFiles.length === 0) || uploading}
-                className="flex shrink-0 items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
+                className="flex items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-5 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95 ml-auto"
               >
                 {uploading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'SHARE'}</span>
+                <span>{uploading ? 'Uploading...' : 'SHARE'}</span>
               </button>
             </div>
           </div>
@@ -961,7 +961,7 @@ export default function Home() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-2.5 truncate pr-2">
+                  <div className="flex items-center gap-2.5 pr-2 min-w-0 flex-1">
                     {col.isPrivate ? (
                       <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                     ) : (
@@ -969,7 +969,7 @@ export default function Home() {
                     )}
                     <span className="truncate">{col.name}</span>
                   </div>
-                  <div className="flex items-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
