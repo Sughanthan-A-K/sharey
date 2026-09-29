@@ -928,14 +928,14 @@ export default function Home() {
                 onDragOver={(e) => handleDragOver(e, null)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDropToCollection(e, null)}
-                className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                className={`w-full flex items-center justify-start px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   activeCollection === null
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 } ${dragOverCollectionId === 'all' ? 'ring-2 ring-indigo-400 border-transparent bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <Folder className="w-4 h-4 text-gray-400" />
+                  <Folder className="w-4 h-4 text-gray-400 shrink-0" />
                   <span className="truncate">All Items</span>
                 </div>
               </button>
@@ -963,9 +963,9 @@ export default function Home() {
                 >
                   <div className="flex items-center gap-2.5 truncate pr-2">
                     {col.isPrivate ? (
-                      <Lock className="w-4 h-4 text-gray-400" />
+                      <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                     ) : (
-                      <Folder className="w-4 h-4 text-gray-400" />
+                      <Folder className="w-4 h-4 text-gray-400 shrink-0" />
                     )}
                     <span className="truncate">{col.name}</span>
                   </div>
