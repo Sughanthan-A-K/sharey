@@ -1137,37 +1137,35 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="pl-8 flex flex-wrap items-center gap-2">
+                <div className="pl-8 flex flex-wrap gap-2 mt-1">
                   {(item.type === 'text' || item.type === 'link') ? (
-                    <button onClick={() => handleCopy(item.content)} className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 gap-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                      <Copy className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Copy</span>
+                    <button onClick={() => handleCopy(item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
+                      <Copy className="w-3.5 h-3.5" /> Copy
                     </button>
                   ) : (
                     <>
                       {item.fileUrl && (
-                        <a href={item.fileUrl} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 gap-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
-                          <Download className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Download</span>
+                        <a href={item.fileUrl} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
+                          <Download className="w-3.5 h-3.5" /> Download
                         </a>
                       )}
-                      <button onClick={() => handleCopy(item.fileUrl || item.content)} className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 gap-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                        <LinkIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Copy Link</span>
+                      <button onClick={() => handleCopy(item.fileUrl || item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
+                        <LinkIcon className="w-3.5 h-3.5" /> Copy Link
                       </button>
                     </>
                   )}
-                  <div className="flex items-center gap-2 sm:ml-auto">
-                    <button onClick={() => {
-                      setEditTarget(item);
-                      setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
-                      setEditAttachedFiles([]);
-                      setEditFileRemoved(false);
-                      setEditItemCollectionId(item.collectionId || null);
-                    }} className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 gap-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
-                      <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Edit</span>
-                    </button>
-                    <button onClick={() => setDeleteTarget(item.id)} className="flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 sm:py-1.5 gap-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
-                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Delete</span>
-                    </button>
-                  </div>
+                  <button onClick={() => {
+                    setEditTarget(item);
+                    setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
+                    setEditAttachedFiles([]);
+                    setEditFileRemoved(false);
+                    setEditItemCollectionId(item.collectionId || null);
+                  }} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
+                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button onClick={() => setDeleteTarget(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
                 </div>
               </div>
             ))
