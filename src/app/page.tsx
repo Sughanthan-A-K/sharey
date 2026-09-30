@@ -71,6 +71,7 @@ function InstagramPlayer({ url }: { url: string }) {
 export default function Home() {
   const [items, setItems] = useState<SharedItem[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [inputTitle, setInputTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<ItemType | 'all'>('all');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -87,6 +88,7 @@ export default function Home() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [editTarget, setEditTarget] = useState<SharedItem | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editTitle, setEditTitle] = useState('');
   const [editAttachedFiles, setEditAttachedFiles] = useState<File[]>([]);
   const [editFileRemoved, setEditFileRemoved] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -471,6 +473,7 @@ export default function Home() {
             .insert({
               user_id: user.id,
               type: getFileType(file),
+              title: inputTitle.trim() || null,
               content: file.name,
               file_name: file.name,
               file_size: formatFileSize(file.size),
@@ -486,6 +489,7 @@ export default function Home() {
           newItems.push({
             id: data.id,
             type: data.type as ItemType,
+            title: data.title,
             content: data.content,
             fileName: data.file_name,
             fileSize: data.file_size,
@@ -502,6 +506,7 @@ export default function Home() {
           .insert({
             user_id: user.id,
             type: detectType(inputValue),
+            title: inputTitle.trim() || null,
             content: inputValue,
             collection_id: selectedCollectionForUpload
           })
@@ -513,6 +518,7 @@ export default function Home() {
         newItems.push({
           id: data.id,
           type: data.type as ItemType,
+          title: data.title,
           content: data.content,
           createdAt: new Date(data.created_at)
         });
@@ -520,6 +526,7 @@ export default function Home() {
 
       setItems([...newItems, ...items]);
       setInputValue('');
+      setInputTitle('');
       setAttachedFiles([]);
       showNotification('Saved');
     } catch (err: any) {
@@ -784,12 +791,20 @@ export default function Home() {
         {/* Left Column: Composer (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-28 order-1">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20">
+            <input
+              type="text"
+              value={inputTitle}
+              onChange={(e) => setInputTitle(e.target.value)}
+              disabled={uploading}
+              placeholder="Title (optional)"
+              className="w-full px-4 pt-4 pb-2 text-gray-900 dark:text-gray-100 font-semibold bg-transparent outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-lg sm:text-xl disabled:opacity-50"
+            />
             <textarea 
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               disabled={uploading}
               placeholder="Paste a link, type something, or share anything..."
-              className="w-full p-4 min-h-[100px] lg:min-h-[140px] resize-none outline-none text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 text-base sm:text-lg bg-transparent disabled:opacity-50"
+              className="w-full px-4 pb-4 pt-2 min-h-[80px] lg:min-h-[100px] resize-none outline-none text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 text-base sm:text-lg bg-transparent disabled:opacity-50"
             />
             
             <input 
@@ -1177,7 +1192,7 @@ export default function Home() {
                   ) : (
                     <>
                       {item.fileUrl && (
-                        <a href={item.fileUrl} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
+                        <a href={${item.fileUrl}?download=} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
                           <Download className="w-3.5 h-3.5" /> Download
                         </a>
                       )}

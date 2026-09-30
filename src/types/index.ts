@@ -11,6 +11,7 @@ export interface Collection {
 export interface SharedItem {
   id: string;
   type: ItemType;
+  title?: string;
   content: string;
   fileName?: string;
   fileSize?: string;
