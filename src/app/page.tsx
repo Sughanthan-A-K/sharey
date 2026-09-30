@@ -1322,7 +1322,7 @@ export default function Home() {
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 placeholder="Type a note or paste a link..."
-                className="w-full bg-transparent resize-none outline-none min-h-[100px] text-gray-800 dark:text-gray-200 text-lg placeholder-gray-400 dark:placeholder-gray-500 mb-4"
+                className="w-full bg-transparent resize-none outline-none min-h-[300px] text-gray-800 dark:text-gray-200 text-lg placeholder-gray-400 dark:placeholder-gray-500 mb-4"
                 disabled={isSavingEdit}
               />
 
