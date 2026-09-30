@@ -1192,7 +1192,7 @@ export default function Home() {
                   ) : (
                     <>
                       {item.fileUrl && (
-                        <a href={${item.fileUrl}?download=} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
+                        <a href={`${item.fileUrl}?download=${encodeURIComponent(item.fileName || 'download')}`} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
                           <Download className="w-3.5 h-3.5" /> Download
                         </a>
                       )}
