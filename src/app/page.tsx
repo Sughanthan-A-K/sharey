@@ -287,6 +287,7 @@ export default function Home() {
       setItems(data.map(d => ({
         id: d.id,
         type: d.type as ItemType,
+        title: d.title,
         content: d.content,
         fileName: d.file_name,
         fileSize: d.file_size,

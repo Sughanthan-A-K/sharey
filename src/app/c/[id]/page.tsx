@@ -48,6 +48,7 @@ export default function PublicCollectionPage() {
       const parsedItems = Array.isArray(data.items) ? data.items : [];
       const formattedItems = parsedItems.map((item: any) => ({
         id: item.id,
+        title: item.title,
         content: item.content,
         type: item.type as ItemType,
         userId: item.user_id,
