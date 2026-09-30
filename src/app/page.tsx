@@ -1143,6 +1143,9 @@ export default function Home() {
                 </div>
 
                 <div className="pl-8 mb-4">
+                  {item.title && (
+                    <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-2">{item.title}</h4>
+                  )}
                   {item.type === 'link' ? (
                     <div>
                       <a href={item.content} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-words flex items-center gap-1.5 mb-2">
