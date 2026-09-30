@@ -749,7 +749,11 @@ export default function Home() {
     // 4. Collection changed?
     const collectionChanged = editItemCollectionId !== (editTarget.collectionId || null);
 
-    return textChanged || fileRemoved || newFilesAdded || collectionChanged;
+    // 5. Title changed?
+    const originalTitle = editTarget.title || '';
+    const titleChanged = editTitle.trim() !== originalTitle;
+
+    return textChanged || fileRemoved || newFilesAdded || collectionChanged || titleChanged;
   };
 
   return (
