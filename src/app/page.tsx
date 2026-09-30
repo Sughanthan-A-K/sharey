@@ -791,14 +791,25 @@ export default function Home() {
         {/* Left Column: Composer (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-28 order-1">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20">
-            <input
-              type="text"
-              value={inputTitle}
-              onChange={(e) => setInputTitle(e.target.value)}
-              disabled={uploading}
-              placeholder="Title (optional)"
-              className="w-full px-4 pt-4 pb-2 text-gray-900 dark:text-gray-100 font-semibold bg-transparent outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-lg sm:text-xl disabled:opacity-50"
-            />
+            <div className="relative w-full">
+              <input
+                type="text"
+                value={inputTitle}
+                onChange={(e) => setInputTitle(e.target.value)}
+                disabled={uploading}
+                placeholder="Title (optional)"
+                className="w-full px-4 pt-4 pb-2 text-gray-900 dark:text-gray-100 font-semibold bg-transparent outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-lg sm:text-xl disabled:opacity-50 pr-10"
+              />
+              {inputTitle && (
+                <button
+                  onClick={() => setInputTitle('')}
+                  disabled={uploading}
+                  className="absolute right-3 top-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             <textarea 
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -1203,6 +1214,7 @@ export default function Home() {
                   )}
                   <button onClick={() => {
                     setEditTarget(item);
+                    setEditTitle(item.title || '');
                     setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
                     setEditAttachedFiles([]);
                     setEditFileRemoved(false);
@@ -1333,11 +1345,31 @@ export default function Home() {
             )}
 
             <div className="overflow-y-auto custom-scrollbar pr-2 flex-1 min-h-0">
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Title (optional)"
+                  className="w-full bg-transparent outline-none text-gray-900 dark:text-gray-100 font-bold text-xl placeholder-gray-400 dark:placeholder-gray-500 pr-10 border-b border-transparent focus:border-gray-200 dark:focus:border-gray-800 pb-2 transition-colors disabled:opacity-50"
+                  disabled={isSavingEdit}
+                />
+                {editTitle && (
+                  <button
+                    onClick={() => setEditTitle('')}
+                    disabled={isSavingEdit}
+                    className="absolute right-1 top-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
               <textarea
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 placeholder="Type a note or paste a link..."
-                className="w-full bg-transparent resize-none outline-none min-h-[300px] text-gray-800 dark:text-gray-200 text-lg placeholder-gray-400 dark:placeholder-gray-500 mb-4"
+                className="w-full bg-transparent resize-none outline-none min-h-[300px] text-gray-800 dark:text-gray-200 text-lg placeholder-gray-400 dark:placeholder-gray-500 mb-4 disabled:opacity-50"
                 disabled={isSavingEdit}
               />
 
@@ -1728,7 +1760,7 @@ export default function Home() {
               <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{previewItem.fileName || 'Preview'}</h3>
               <div className="flex items-center gap-2">
                 <a 
-                  href={previewItem.fileUrl} 
+                  href={`${previewItem.fileUrl}?download=${encodeURIComponent(previewItem.fileName || 'download')}`} 
                   download={previewItem.fileName} 
                   target="_blank" 
                   rel="noreferrer" 

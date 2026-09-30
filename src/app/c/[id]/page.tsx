@@ -291,7 +291,7 @@ export default function PublicCollectionPage() {
               <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{previewItem.fileName || 'Preview'}</h3>
               <div className="flex items-center gap-2">
                 <a 
-                  href={previewItem.fileUrl} 
+                  href={`${previewItem.fileUrl}?download=${encodeURIComponent(previewItem.fileName || 'download')}`} 
                   download={previewItem.fileName} 
                   target="_blank" 
                   rel="noreferrer" 
