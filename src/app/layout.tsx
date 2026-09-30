@@ -18,8 +18,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="manifest" href="/manifest.json?v=2" />
+        <link rel="apple-touch-icon" href="/icon-512x512.png" />
         <meta name="theme-color" content="#ffffff" />
       </head>
       <body suppressHydrationWarning className={`${inter.className} min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors`}>
