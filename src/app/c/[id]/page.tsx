@@ -28,6 +28,19 @@ export default function PublicCollectionPage() {
   
   const [previewItem, setPreviewItem] = useState<SharedItem | null>(null);
 
+  const renderTextWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+            {part}
+          </a>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
   useEffect(() => {
     fetchCollection();
   }, [id]);
@@ -224,7 +237,7 @@ export default function PublicCollectionPage() {
                       {renderEmbed(item.content)}
                     </div>
                   ) : item.type === 'text' ? (
-                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{item.content}</p>
+                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{renderTextWithLinks(item.content)}</p>
                   ) : (
                     <div className="flex flex-col gap-3">
                       <div 

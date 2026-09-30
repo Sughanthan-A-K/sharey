@@ -8,7 +8,7 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown, GripVertical
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -696,6 +696,20 @@ export default function Home() {
     }
   };
 
+  const renderTextWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+            {part}
+          </a>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   const renderEmbed = (url: string) => {
     try {
       const parsedUrl = new URL(url);
@@ -1113,14 +1127,20 @@ export default function Home() {
             filteredItems.map(item => (
               <div 
                 key={item.id} 
-                draggable
-                onDragStart={(e) => handleDragStart(e, item.id)}
-                className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all cursor-grab active:cursor-grabbing ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
+                className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
               >
                 
                 {/* Header with Icon */}
                 <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div 
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, item.id)}
+                      className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:block"
+                      title="Drag to collection"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </div>
                     <label className="flex items-center cursor-pointer shrink-0">
                       <input 
                         type="checkbox" 
@@ -1160,7 +1180,7 @@ export default function Home() {
                       {renderEmbed(item.content)}
                     </div>
                   ) : item.type === 'text' ? (
-                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{item.content}</p>
+                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{renderTextWithLinks(item.content)}</p>
                   ) : (
                     <div className="flex flex-col gap-3">
                       <div 
