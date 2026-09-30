@@ -156,6 +156,7 @@ export default function Home() {
           finalType = 'link';
         }
         await processPayload({
+          title: editTitle.trim() || null,
           content: editValue.trim(),
           type: finalType,
           file_name: null,
@@ -170,6 +171,7 @@ export default function Home() {
         if (isFirst) {
            // We update the existing item to apply the potential new collection_id
            await processPayload({
+             title: editTitle.trim() || null,
              content: editTarget.fileName,
              type: editTarget.type,
              file_name: editTarget.fileName,
@@ -179,6 +181,7 @@ export default function Home() {
         } else {
            // Text took the first slot, so insert the existing file as a new item
            await processPayload({
+             title: editTitle.trim() || null,
              content: editTarget.fileName,
              type: editTarget.type,
              file_name: editTarget.fileName,
@@ -200,6 +203,7 @@ export default function Home() {
         const { data: { publicUrl } } = supabase.storage.from('sharey_files').getPublicUrl(filePath);
 
         await processPayload({
+          title: editTitle.trim() || null,
           file_name: file.name,
           content: file.name,
           file_url: publicUrl,
