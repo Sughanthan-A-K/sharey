@@ -33,7 +33,7 @@ export default function PublicCollectionPage() {
     return text.split(urlRegex).map((part, i) => {
       if (part.match(urlRegex)) {
         return (
-          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all">
             {part}
           </a>
         );
@@ -211,7 +211,7 @@ export default function PublicCollectionPage() {
             items.map(item => (
               <div 
                 key={item.id} 
-                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-sm transition-all"
+                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-sm transition-all min-w-0"
               >
                 <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -227,12 +227,20 @@ export default function PublicCollectionPage() {
                   </div>
                 </div>
 
-                <div className="pl-10 mb-4">
+                <div className="pl-10 mb-4 min-w-0">
+                  {item.title && (
+                    <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-1 break-words">{item.title}</h4>
+                  )}
                   {item.type === 'link' ? (
-                    <div>
-                      <a href={item.content} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-words flex items-center gap-1.5 mb-2">
-                        {item.content}
-                        <ExternalLink className="w-3.5 h-3.5 inline" />
+                    <div className="min-w-0 mb-2">
+                      <a 
+                        href={item.content} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all inline leading-relaxed"
+                      >
+                        <span>{item.content}</span>
+                        <ExternalLink className="w-3.5 h-3.5 inline ml-1.5 align-middle shrink-0" />
                       </a>
                       {renderEmbed(item.content)}
                     </div>

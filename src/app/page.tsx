@@ -701,7 +701,7 @@ export default function Home() {
     return text.split(urlRegex).map((part, i) => {
       if (part.match(urlRegex)) {
         return (
-          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+          <a key={i} href={part} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all">
             {part}
           </a>
         );
@@ -1109,7 +1109,7 @@ export default function Home() {
         </div>
 
         {/* Center Column: Feed (Scrollable) */}
-        <div className={`lg:col-span-6 space-y-4 order-3 lg:order-2 ${isUnlockedBlinking ? 'animate-border-blink' : ''}`}>
+        <div className={`lg:col-span-6 min-w-0 space-y-4 order-3 lg:order-2 ${isUnlockedBlinking ? 'animate-border-blink' : ''}`}>
           {loading ? (
             <div className="flex justify-center items-center py-12 gap-2 text-gray-400 font-medium">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -1127,7 +1127,7 @@ export default function Home() {
             filteredItems.map(item => (
               <div 
                 key={item.id} 
-                className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
+                className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all min-w-0 ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
               >
                 
                 {/* Header with Icon */}
@@ -1167,15 +1167,20 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="pl-8 mb-4">
+                <div className="pl-8 mb-4 min-w-0">
                   {item.title && (
-                    <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-2">{item.title}</h4>
+                    <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-2 break-words">{item.title}</h4>
                   )}
                   {item.type === 'link' ? (
-                    <div>
-                      <a href={item.content} target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-words flex items-center gap-1.5 mb-2">
-                        {item.content}
-                        <ExternalLink className="w-3.5 h-3.5 inline" />
+                    <div className="min-w-0 mb-2">
+                      <a 
+                        href={item.content} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all inline leading-relaxed"
+                      >
+                        <span>{item.content}</span>
+                        <ExternalLink className="w-3.5 h-3.5 inline ml-1.5 align-middle shrink-0" />
                       </a>
                       {renderEmbed(item.content)}
                     </div>
