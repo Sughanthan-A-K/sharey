@@ -8,6 +8,14 @@ export interface Collection {
   createdAt: Date;
 }
 
+export interface ItemFileAttachment {
+  name: string;
+  size?: string;
+  url: string;
+  type: ItemType;
+  mimeType?: string;
+}
+
 export interface SharedItem {
   id: string;
   type: ItemType;
@@ -16,6 +24,7 @@ export interface SharedItem {
   fileName?: string;
   fileSize?: string;
   fileUrl?: string;
+  fileItems?: ItemFileAttachment[];
   collectionId?: string | null;
   createdAt: Date;
 }

@@ -21,6 +21,19 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json?v=2" />
         <link rel="apple-touch-icon" href="/icon-512x512.png" />
         <meta name="theme-color" content="#ffffff" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    console.log('SW registration failed:', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning className={`${inter.className} min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

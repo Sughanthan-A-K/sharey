@@ -8,9 +8,10 @@ import {
   Paperclip, Send, Search, Image as ImageIcon, Link as LinkIcon, 
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
-  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown, GripVertical
+  Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown, GripVertical,
+  ChevronLeft, ChevronRight, Share2, UploadCloud
 } from 'lucide-react';
-import { SharedItem, ItemType, Collection } from '@/types';
+import { SharedItem, ItemType, Collection, ItemFileAttachment } from '@/types';
 import { createClient } from '@/utils/supabase/client';
 
 function InstagramPlayer({ url }: { url: string }) {
@@ -114,9 +115,22 @@ export default function Home() {
   const [showPromptPin, setShowPromptPin] = useState(false);
   const [isUnlockedBlinking, setIsUnlockedBlinking] = useState(false);
   
-  // File Preview
-  const [previewItem, setPreviewItem] = useState<SharedItem | null>(null);
-  
+  // Drag & Drop onto composer
+  const [isDragOverComposer, setIsDragOverComposer] = useState(false);
+
+  // Collection Confirmation Modal
+  const [showCollectionConfirmModal, setShowCollectionConfirmModal] = useState(false);
+  const [pendingSharePayload, setPendingSharePayload] = useState<{
+    text: string;
+    title: string;
+    files: File[];
+  } | null>(null);
+
+  // Gallery Navigation Modal
+  const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
+  const [previewIndex, setPreviewIndex] = useState<number>(0);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -244,7 +258,7 @@ export default function Home() {
   }, [activeCollection]);
 
   useEffect(() => {
-    if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget) {
+    if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget || showCollectionConfirmModal || showPreviewModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -252,7 +266,49 @@ export default function Home() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [editTarget, deleteTarget, showLogoutConfirm, showCollectionModal, deleteCollectionTarget]);
+  }, [editTarget, deleteTarget, showLogoutConfirm, showCollectionModal, deleteCollectionTarget, showCollectionConfirmModal, showPreviewModal]);
+
+  const parseFileAttachments = (rawContent: string, fallbackUrl?: string, fallbackName?: string, fallbackType: ItemType = 'file'): ItemFileAttachment[] => {
+    try {
+      if (rawContent && rawContent.startsWith('{') && rawContent.endsWith('}')) {
+        const parsed = JSON.parse(rawContent);
+        if (parsed && parsed.__sharey_multi__ && Array.isArray(parsed.files)) {
+          return parsed.files;
+        }
+      }
+    } catch (e) {
+      // not multi json
+    }
+
+    if (fallbackUrl) {
+      return [{
+        name: fallbackName || 'attachment',
+        url: fallbackUrl,
+        type: fallbackType,
+      }];
+    }
+    return [];
+  };
+
+  const getDisplayContent = (item: SharedItem): string => {
+    if (item.content && item.content.startsWith('{') && item.content.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(item.content);
+        if (parsed && parsed.__sharey_multi__) {
+          return parsed.text || '';
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+    return item.content || '';
+  };
+
+  const openGalleryAt = (files: { url: string; name: string; type: ItemType }[], index: number) => {
+    setPreviewFiles(files);
+    setPreviewIndex(index);
+    setShowPreviewModal(true);
+  };
 
   const fetchItems = async () => {
     setLoading(true);
@@ -292,6 +348,7 @@ export default function Home() {
         fileName: d.file_name,
         fileSize: d.file_size,
         fileUrl: d.file_url,
+        fileItems: parseFileAttachments(d.content, d.file_url, d.file_name, d.type as ItemType),
         collectionId: d.collection_id,
         createdAt: new Date(d.created_at)
       })));
@@ -443,10 +500,82 @@ export default function Home() {
     setTimeout(() => setShowToast(false), 2000);
   };
 
-  const handleSharey = async () => {
+  const addFilesToPending = (newFilesArray: File[]) => {
+    let dbDuplicateCount = 0;
+    let limitHit = false;
+    let sizeLimitHit = false;
+    
+    const validFiles: File[] = [];
+    newFilesArray.forEach(file => {
+      if (file.size > 50 * 1024 * 1024) {
+        sizeLimitHit = true;
+        return;
+      }
+
+      const formattedSize = formatFileSize(file.size);
+      const inDB = items.some(item => (item.fileName === file.name && item.fileSize === formattedSize) || (item.fileItems && item.fileItems.some(fi => fi.name === file.name)));
+      
+      if (inDB) {
+        dbDuplicateCount++;
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    setAttachedFiles(prev => {
+      const combined = [...prev];
+      validFiles.forEach(file => {
+        const inPending = combined.some(f => f.name === file.name && f.size === file.size);
+        if (!inPending) {
+          if (combined.length < 10) {
+            combined.push(file);
+          } else {
+            limitHit = true;
+          }
+        }
+      });
+      return combined;
+    });
+
+    setTimeout(() => {
+      if (sizeLimitHit) {
+        showNotification("Files over 50MB are not allowed");
+      } else if (dbDuplicateCount > 0) {
+        showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
+      } else if (limitHit) {
+        showNotification("Maximum 10 files allowed");
+      }
+    }, 0);
+  };
+
+  const onShareButtonClick = () => {
     if ((!inputValue.trim() && attachedFiles.length === 0) || uploading) return;
 
+    if (selectedCollectionForUpload) {
+      setPendingSharePayload({
+        text: inputValue,
+        title: inputTitle,
+        files: [...attachedFiles]
+      });
+      setShowCollectionConfirmModal(true);
+      return;
+    }
+
+    executeUpload();
+  };
+
+  const executeUpload = async (collectionOverride?: string | null) => {
+    const targetCollectionId = collectionOverride !== undefined ? collectionOverride : selectedCollectionForUpload;
+    const textToSave = pendingSharePayload ? pendingSharePayload.text : inputValue;
+    const titleToSave = pendingSharePayload ? pendingSharePayload.title : inputTitle;
+    const filesToSave = pendingSharePayload ? pendingSharePayload.files : attachedFiles;
+
+    if ((!textToSave.trim() && filesToSave.length === 0) || uploading) return;
+
     setUploading(true);
+    setShowCollectionConfirmModal(false);
+    setPendingSharePayload(null);
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setUploading(false);
@@ -454,11 +583,10 @@ export default function Home() {
     }
 
     try {
-      const newItems: SharedItem[] = [];
-
-      // 1. Upload files
-      if (attachedFiles.length > 0) {
-        for (const file of attachedFiles) {
+      if (filesToSave.length > 0) {
+        const uploadedAttachments: ItemFileAttachment[] = [];
+        
+        for (const file of filesToSave) {
           const fileExt = file.name.split('.').pop();
           const fileName = `${Math.random()}.${fileExt}`;
           const filePath = `${user.id}/${fileName}`;
@@ -473,63 +601,81 @@ export default function Home() {
             .from('sharey_files')
             .getPublicUrl(filePath);
 
-          const { data, error: dbError } = await supabase
-            .from('shared_items')
-            .insert({
-              user_id: user.id,
-              type: getFileType(file),
-              title: inputTitle.trim() || null,
-              content: file.name,
-              file_name: file.name,
-              file_size: formatFileSize(file.size),
-              file_url: publicUrl,
-              mime_type: file.type,
-              collection_id: selectedCollectionForUpload
-            })
-            .select()
-            .single();
-
-          if (dbError) throw dbError;
-          
-          newItems.push({
-            id: data.id,
-            type: data.type as ItemType,
-            title: data.title,
-            content: data.content,
-            fileName: data.file_name,
-            fileSize: data.file_size,
-            fileUrl: data.file_url,
-            createdAt: new Date(data.created_at)
+          uploadedAttachments.push({
+            name: file.name,
+            size: formatFileSize(file.size),
+            url: publicUrl,
+            type: getFileType(file),
+            mimeType: file.type
           });
         }
-      }
 
-      // 2. Save text/link
-      if (inputValue.trim()) {
+        const primaryType = uploadedAttachments.some(f => f.type === 'image') ? 'image' : uploadedAttachments[0].type;
+        const multiPayload = {
+          __sharey_multi__: true,
+          text: textToSave.trim() || '',
+          files: uploadedAttachments
+        };
+
+        const { data, error: dbError } = await supabase
+          .from('shared_items')
+          .insert({
+            user_id: user.id,
+            type: primaryType,
+            title: titleToSave.trim() || null,
+            content: JSON.stringify(multiPayload),
+            file_name: uploadedAttachments[0].name,
+            file_size: uploadedAttachments[0].size,
+            file_url: uploadedAttachments[0].url,
+            mime_type: uploadedAttachments[0].mimeType,
+            collection_id: targetCollectionId
+          })
+          .select()
+          .single();
+
+        if (dbError) throw dbError;
+
+        const newItem: SharedItem = {
+          id: data.id,
+          type: data.type as ItemType,
+          title: data.title,
+          content: data.content,
+          fileName: data.file_name,
+          fileSize: data.file_size,
+          fileUrl: data.file_url,
+          fileItems: uploadedAttachments,
+          collectionId: data.collection_id,
+          createdAt: new Date(data.created_at)
+        };
+
+        setItems([newItem, ...items]);
+      } else if (textToSave.trim()) {
         const { data, error } = await supabase
           .from('shared_items')
           .insert({
             user_id: user.id,
-            type: detectType(inputValue),
-            title: inputTitle.trim() || null,
-            content: inputValue,
-            collection_id: selectedCollectionForUpload
+            type: detectType(textToSave),
+            title: titleToSave.trim() || null,
+            content: textToSave,
+            collection_id: targetCollectionId
           })
           .select()
           .single();
 
         if (error) throw error;
 
-        newItems.push({
+        const newItem: SharedItem = {
           id: data.id,
           type: data.type as ItemType,
           title: data.title,
           content: data.content,
+          collectionId: data.collection_id,
           createdAt: new Date(data.created_at)
-        });
+        };
+
+        setItems([newItem, ...items]);
       }
 
-      setItems([...newItems, ...items]);
       setInputValue('');
       setInputTitle('');
       setAttachedFiles([]);
@@ -545,56 +691,8 @@ export default function Home() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFilesArray = Array.from(e.target.files);
-      let dbDuplicateCount = 0;
-      let limitHit = false;
-      let sizeLimitHit = false;
-      
-      // Calculate first
-      const validFiles: File[] = [];
-      newFilesArray.forEach(file => {
-        if (file.size > 50 * 1024 * 1024) {
-          sizeLimitHit = true;
-          return;
-        }
-
-        const formattedSize = formatFileSize(file.size);
-        const inDB = items.some(item => item.fileName === file.name && item.fileSize === formattedSize);
-        
-        if (inDB) {
-          dbDuplicateCount++;
-        } else {
-          validFiles.push(file);
-        }
-      });
-
-      // Then update state
-      setAttachedFiles(prev => {
-        const combined = [...prev];
-        validFiles.forEach(file => {
-          const inPending = combined.some(f => f.name === file.name && f.size === file.size);
-          if (!inPending) {
-            if (combined.length < 10) {
-              combined.push(file);
-            } else {
-              limitHit = true;
-            }
-          }
-        });
-        return combined;
-      });
-
+      addFilesToPending(newFilesArray);
       e.target.value = '';
-
-      // We can use setTimeout to ensure React processes the state first, though not strictly required, it's safer for toasts
-      setTimeout(() => {
-        if (sizeLimitHit) {
-          showNotification("Files over 50MB are not allowed");
-        } else if (dbDuplicateCount > 0) {
-          showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
-        } else if (limitHit) {
-          showNotification("Maximum 10 files allowed");
-        }
-      }, 0);
     }
   };
 
@@ -620,11 +718,25 @@ export default function Home() {
       const itemsToDelete = items.filter(i => selectedItems.has(i.id) && i.fileUrl);
       
       for (const item of itemsToDelete) {
-         const urlObj = new URL(item.fileUrl!);
-         const parts = urlObj.pathname.split('/sharey_files/');
-         if (parts.length > 1) {
-           await supabase.storage.from('sharey_files').remove([parts[1]]);
-         }
+        if (item.fileItems && item.fileItems.length > 0) {
+          for (const fi of item.fileItems) {
+            try {
+              const urlObj = new URL(fi.url);
+              const parts = urlObj.pathname.split('/sharey_files/');
+              if (parts.length > 1) {
+                await supabase.storage.from('sharey_files').remove([parts[1]]);
+              }
+            } catch (e) {}
+          }
+        } else if (item.fileUrl) {
+          try {
+            const urlObj = new URL(item.fileUrl);
+            const parts = urlObj.pathname.split('/sharey_files/');
+            if (parts.length > 1) {
+              await supabase.storage.from('sharey_files').remove([parts[1]]);
+            }
+          } catch (e) {}
+        }
       }
       await supabase.from('shared_items').delete().in('id', idsToDelete);
       setItems(items.filter(item => !selectedItems.has(item.id)));
@@ -632,12 +744,26 @@ export default function Home() {
     } else {
       const id = deleteTarget;
       const itemToDelete = items.find(i => i.id === id);
-      if (itemToDelete?.fileUrl) {
-        const urlObj = new URL(itemToDelete.fileUrl);
-        const parts = urlObj.pathname.split('/sharey_files/');
-        if (parts.length > 1) {
-          const filePath = parts[1];
-          await supabase.storage.from('sharey_files').remove([filePath]);
+      if (itemToDelete) {
+        if (itemToDelete.fileItems && itemToDelete.fileItems.length > 0) {
+          for (const fi of itemToDelete.fileItems) {
+            try {
+              const urlObj = new URL(fi.url);
+              const parts = urlObj.pathname.split('/sharey_files/');
+              if (parts.length > 1) {
+                await supabase.storage.from('sharey_files').remove([parts[1]]);
+              }
+            } catch (e) {}
+          }
+        } else if (itemToDelete.fileUrl) {
+          try {
+            const urlObj = new URL(itemToDelete.fileUrl);
+            const parts = urlObj.pathname.split('/sharey_files/');
+            if (parts.length > 1) {
+              const filePath = parts[1];
+              await supabase.storage.from('sharey_files').remove([filePath]);
+            }
+          } catch (e) {}
         }
       }
       await supabase.from('shared_items').delete().eq('id', id);
@@ -813,7 +939,39 @@ export default function Home() {
         
         {/* Left Column: Composer (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-28 order-1">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20">
+          <div 
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverComposer(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverComposer(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverComposer(false);
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                addFilesToPending(droppedFiles);
+              }
+            }}
+            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-sm border transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20 ${
+              isDragOverComposer 
+                ? 'border-indigo-500 ring-2 ring-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20' 
+                : 'border-gray-200 dark:border-gray-800'
+            }`}
+          >
+            {isDragOverComposer && (
+              <div className="absolute inset-0 bg-indigo-500/10 dark:bg-indigo-500/20 backdrop-blur-[1px] rounded-2xl flex flex-col items-center justify-center pointer-events-none z-30 border-2 border-dashed border-indigo-500 animate-in fade-in">
+                <UploadCloud className="w-10 h-10 text-indigo-600 dark:text-indigo-400 animate-bounce mb-2" />
+                <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Drop files here to attach</p>
+              </div>
+            )}
+
             <div className="relative w-full">
               <input
                 type="text"
@@ -850,23 +1008,34 @@ export default function Home() {
             />
 
             {attachedFiles.length > 0 && (
-              <div className="pl-5 pr-2 mr-2 pb-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
-                {attachedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg w-full">
-                    <div className="p-1.5 bg-white dark:bg-gray-800 rounded-md shadow-sm">
-                      {getIconForType(getFileType(file))}
+              <div className="pl-4 pr-3 pb-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                {attachedFiles.map((file, idx) => {
+                  const isImg = file.type.startsWith('image/');
+                  const tempUrl = isImg ? URL.createObjectURL(file) : null;
+                  return (
+                    <div key={idx} className="flex items-center gap-2.5 p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl w-full">
+                      {isImg && tempUrl ? (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={tempUrl} alt={file.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 rounded-md shadow-sm shrink-0 flex items-center justify-center">
+                          {getIconForType(getFileType(file))}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{formatFileSize(file.size)}</p>
+                      </div>
+                      {!uploading && (
+                        <button onClick={() => removeAttachedFile(idx)} className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{formatFileSize(file.size)}</p>
-                    </div>
-                    {!uploading && (
-                      <button onClick={() => removeAttachedFile(idx)} className="text-gray-400 hover:text-red-500 p-1">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -936,7 +1105,7 @@ export default function Home() {
                 )}
               </div>
               <button 
-                onClick={handleSharey}
+                onClick={onShareButtonClick}
                 disabled={(!inputValue.trim() && attachedFiles.length === 0) || uploading}
                 className="flex shrink-0 items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
               >
@@ -1124,7 +1293,13 @@ export default function Home() {
               <p className="text-sm mt-1">Paste something or attach files to get started.</p>
             </div>
           ) : (
-            filteredItems.map(item => (
+            filteredItems.map(item => {
+              const cardFiles = item.fileItems && item.fileItems.length > 0 
+                ? item.fileItems 
+                : (item.fileUrl ? [{ name: item.fileName || 'file', size: item.fileSize, url: item.fileUrl, type: item.type }] : []);
+              const textContent = getDisplayContent(item);
+
+              return (
               <div 
                 key={item.id} 
                 className={`bg-white dark:bg-gray-900 rounded-2xl border p-4 sm:p-5 transition-all min-w-0 ${selectedItems.has(item.id) ? 'border-indigo-400 dark:border-indigo-500 ring-1 ring-indigo-400 dark:ring-indigo-500 shadow-sm' : 'border-gray-200 dark:border-gray-800 shadow-sm hover:border-gray-300 dark:hover:border-gray-700'}`}
@@ -1167,92 +1342,128 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Card Content */}
                 <div className="pl-8 mb-4 min-w-0">
                   {item.title && (
                     <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-2 break-words">{item.title}</h4>
                   )}
-                  {item.type === 'link' ? (
-                    <div className="min-w-0 mb-2">
-                      <a 
-                        href={item.content} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all inline leading-relaxed"
-                      >
-                        <span>{item.content}</span>
-                        <ExternalLink className="w-3.5 h-3.5 inline ml-1.5 align-middle shrink-0" />
-                      </a>
-                      {renderEmbed(item.content)}
-                    </div>
-                  ) : item.type === 'text' ? (
-                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{renderTextWithLinks(item.content)}</p>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      <div 
-                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 -ml-2 rounded-xl transition-colors"
-                        onClick={() => {
-                          if (item.fileUrl && item.type !== 'video') {
-                            setPreviewItem(item);
-                          }
-                        }}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-[15px]">{item.fileName || item.content}</p>
-                          {item.fileSize && <p className="text-xs text-gray-500 dark:text-gray-400">{item.fileSize}</p>}
-                        </div>
-                      </div>
 
-                      {/* Actual Image / Video */}
-                      {item.fileUrl && item.type === 'image' && (
-                         <div 
-                           className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer"
-                           onClick={() => setPreviewItem(item)}
-                         >
-                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                           <img 
-                            src={item.fileUrl} 
-                            alt={item.fileName || 'Image'} 
-                            className="w-full h-auto max-h-[500px] object-contain bg-gray-50 dark:bg-gray-950 transition-transform hover:scale-[1.02]" 
-                            loading="lazy" 
-                           />
-                         </div>
-                      )}
-                      
-                      {item.fileUrl && item.type === 'video' && (
-                        <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black aspect-video flex">
-                          <video 
-                            src={item.fileUrl} 
-                            controls 
-                            playsInline
-                            className="w-full h-full object-contain"
-                          />
+                  {/* Text or Link */}
+                  {textContent && (
+                    item.type === 'link' ? (
+                      <div className="min-w-0 mb-2">
+                        <a 
+                          href={textContent} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline break-all inline leading-relaxed"
+                        >
+                          <span>{textContent}</span>
+                          <ExternalLink className="w-3.5 h-3.5 inline ml-1.5 align-middle shrink-0" />
+                        </a>
+                        {renderEmbed(textContent)}
+                      </div>
+                    ) : (
+                      <p className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words text-[15px] leading-relaxed mb-2">
+                        {renderTextWithLinks(textContent)}
+                      </p>
+                    )
+                  )}
+
+                  {/* Attached Files & Gallery */}
+                  {cardFiles.length > 0 && (
+                    <div className="space-y-3 pt-1">
+                      {/* Image Grid / Gallery */}
+                      {cardFiles.filter(f => f.type === 'image').length > 0 && (
+                        <div className={`grid gap-2 ${
+                          cardFiles.filter(f => f.type === 'image').length === 1 
+                            ? 'grid-cols-1' 
+                            : cardFiles.filter(f => f.type === 'image').length === 2 
+                              ? 'grid-cols-2' 
+                              : 'grid-cols-2 sm:grid-cols-3'
+                        }`}>
+                          {cardFiles.filter(f => f.type === 'image').map((f, imgIdx) => (
+                            <div 
+                              key={imgIdx} 
+                              onClick={() => openGalleryAt(cardFiles, cardFiles.findIndex(file => file.url === f.url))}
+                              className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img 
+                                src={f.url} 
+                                alt={f.name} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
+                                loading="lazy" 
+                              />
+                            </div>
+                          ))}
                         </div>
                       )}
+
+                      {/* Video Files */}
+                      {cardFiles.filter(f => f.type === 'video').map((f, vIdx) => (
+                        <div key={vIdx} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black aspect-video flex">
+                          <video src={f.url} controls playsInline className="w-full h-full object-contain" />
+                        </div>
+                      ))}
+
+                      {/* Document / Other files */}
+                      {cardFiles.filter(f => f.type === 'file').map((f, docIdx) => (
+                        <div 
+                          key={docIdx}
+                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-xl"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-3">
+                            <div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-orange-500">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-sm">{f.name}</p>
+                              {f.size && <p className="text-xs text-gray-500 dark:text-gray-400">{f.size}</p>}
+                            </div>
+                          </div>
+                          <a 
+                            href={`${f.url}?download=${encodeURIComponent(f.name)}`} 
+                            download={f.name} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </a>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
+                {/* Card Actions */}
                 <div className="pl-8 flex flex-wrap gap-2 mt-1">
-                  {(item.type === 'text' || item.type === 'link') ? (
-                    <button onClick={() => handleCopy(item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                      <Copy className="w-3.5 h-3.5" /> Copy
+                  {textContent && (
+                    <button onClick={() => handleCopy(textContent)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
+                      <Copy className="w-3.5 h-3.5" /> Copy Text
                     </button>
-                  ) : (
-                    <>
-                      {item.fileUrl && (
-                        <a href={`${item.fileUrl}?download=${encodeURIComponent(item.fileName || 'download')}`} download={item.fileName} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </a>
-                      )}
-                      <button onClick={() => handleCopy(item.fileUrl || item.content)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors">
-                        <LinkIcon className="w-3.5 h-3.5" /> Copy Link
-                      </button>
-                    </>
                   )}
+                  {cardFiles.length === 1 && (
+                    <a href={`${cardFiles[0].url}?download=${encodeURIComponent(cardFiles[0].name)}`} download={cardFiles[0].name} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
+                      <Download className="w-3.5 h-3.5" /> Download
+                    </a>
+                  )}
+                  {/* Share Link for every card */}
+                  <button 
+                    onClick={() => {
+                      const shareUrl = `${window.location.origin}/item/${item.id}`;
+                      handleCopy(shareUrl);
+                      showNotification('Share link copied to clipboard');
+                    }} 
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/40 rounded-lg text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-colors"
+                  >
+                    <Share2 className="w-3.5 h-3.5" /> Share
+                  </button>
                   <button onClick={() => {
                     setEditTarget(item);
                     setEditTitle(item.title || '');
-                    setEditValue(item.type === 'text' || item.type === 'link' ? item.content : '');
+                    setEditValue(textContent);
                     setEditAttachedFiles([]);
                     setEditFileRemoved(false);
                     setEditItemCollectionId(item.collectionId || null);
@@ -1264,7 +1475,8 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-            ))
+            );
+          })
           )}
         </div>
       </div>
@@ -1788,17 +2000,99 @@ export default function Home() {
         </div>
       )}
 
-      {/* File Preview Modal */}
-      {previewItem && previewItem.fileUrl && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setPreviewItem(null)}></div>
-          <div className="bg-white dark:bg-gray-900 w-full h-full sm:w-[95vw] sm:h-[95vh] sm:rounded-2xl shadow-2xl relative z-10 border-0 sm:border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{previewItem.fileName || 'Preview'}</h3>
-              <div className="flex items-center gap-2">
+      {/* Collection Confirmation Modal */}
+      {showCollectionConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setShowCollectionConfirmModal(false)}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md shadow-2xl relative z-10 border border-gray-200 dark:border-gray-800 p-6 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400">
+              <Folder className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Save to Collection?</h3>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+              You are about to save this to{' '}
+              <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                &quot;{collections.find(c => c.id === selectedCollectionForUpload)?.name || 'Selected Collection'}&quot;
+              </span>.
+            </p>
+
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Change Destination Collection:
+              </label>
+              <select
+                value={selectedCollectionForUpload || ''}
+                onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
+                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500"
+              >
+                <option value="">No Collection (All Items)</option>
+                {collections.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowCollectionConfirmModal(false)}
+                className="flex-1 px-4 py-2.5 font-medium text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => executeUpload(selectedCollectionForUpload)}
+                className="flex-1 px-4 py-2.5 font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow"
+              >
+                Confirm &amp; Share
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gallery & Preview Modal with < and > Navigation */}
+      {showPreviewModal && previewFiles.length > 0 && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowPreviewModal(false)}></div>
+          
+          {/* Previous Button */}
+          {previewFiles.length > 1 && (
+            <button 
+              onClick={() => setPreviewIndex((previewIndex - 1 + previewFiles.length) % previewFiles.length)}
+              className="absolute left-3 sm:left-6 z-20 p-2.5 sm:p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-105"
+              title="Previous"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Next Button */}
+          {previewFiles.length > 1 && (
+            <button 
+              onClick={() => setPreviewIndex((previewIndex + 1) % previewFiles.length)}
+              className="absolute right-3 sm:right-6 z-20 p-2.5 sm:p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 transition-all hover:scale-105"
+              title="Next"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+
+          <div className="bg-white dark:bg-gray-900 w-full h-full sm:w-[92vw] sm:h-[92vh] sm:rounded-3xl shadow-2xl relative z-10 border-0 sm:border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0 pr-4">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
+                  {previewFiles[previewIndex]?.name || 'Preview'}
+                </h3>
+                {previewFiles.length > 1 && (
+                  <span className="text-xs px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-full font-medium shrink-0">
+                    {previewIndex + 1} / {previewFiles.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
                 <a 
-                  href={`${previewItem.fileUrl}?download=${encodeURIComponent(previewItem.fileName || 'download')}`} 
-                  download={previewItem.fileName} 
+                  href={`${previewFiles[previewIndex]?.url}?download=${encodeURIComponent(previewFiles[previewIndex]?.name || 'download')}`} 
+                  download={previewFiles[previewIndex]?.name} 
                   target="_blank" 
                   rel="noreferrer" 
                   className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
@@ -1807,7 +2101,7 @@ export default function Home() {
                   <Download className="w-5 h-5" />
                 </a>
                 <button 
-                  onClick={() => setPreviewItem(null)}
+                  onClick={() => setShowPreviewModal(false)}
                   className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                   title="Close"
                 >
@@ -1815,14 +2109,19 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
             <div className="flex-1 overflow-auto bg-gray-50 dark:bg-black p-4 flex items-center justify-center">
-              {previewItem.type === 'image' ? (
+              {previewFiles[previewIndex]?.type === 'image' ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewItem.fileUrl} alt={previewItem.fileName || ''} className="max-w-full max-h-full object-contain" />
-              ) : previewItem.type === 'video' ? (
-                <video src={previewItem.fileUrl} controls playsInline className="max-w-full max-h-full" />
+                <img 
+                  src={previewFiles[previewIndex]?.url} 
+                  alt={previewFiles[previewIndex]?.name || ''} 
+                  className="max-w-full max-h-full object-contain rounded-lg" 
+                />
+              ) : previewFiles[previewIndex]?.type === 'video' ? (
+                <video src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
               ) : (
-                <iframe src={previewItem.fileUrl} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
+                <iframe src={previewFiles[previewIndex]?.url} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
               )}
             </div>
           </div>
