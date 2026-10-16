@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Use service role if available for public fetch bypass, or fallback to anon key
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -19,7 +18,19 @@ export async function GET(
       return NextResponse.json({ error: 'Missing item id' }, { status: 400 });
     }
 
-    // 1. First attempt to fetch the item
+    // 1. Try RPC function first (handles SECURITY DEFINER regardless of anon vs service role)
+    const { data: rpcData, error: rpcError } = await supabaseServer.rpc('get_shared_item_data', {
+      p_item_id: id
+    });
+
+    if (!rpcError && rpcData && rpcData.item) {
+      return NextResponse.json({
+        item: rpcData.item,
+        collection: rpcData.collection || null
+      });
+    }
+
+    // 2. Fallback to direct table query (works if SERVICE_ROLE_KEY is configured)
     const { data: itemData, error: itemError } = await supabaseServer
       .from('shared_items')
       .select('*')
@@ -27,11 +38,10 @@ export async function GET(
       .single();
 
     if (itemError || !itemData) {
-      // Also try RPC if defined or return 404
       return NextResponse.json({ error: 'Item not found or has been removed' }, { status: 404 });
     }
 
-    // 2. If item belongs to a collection, fetch the collection info
+    // If item belongs to a collection, fetch the collection info
     let collectionData = null;
     if (itemData.collection_id) {
       const { data: col } = await supabaseServer

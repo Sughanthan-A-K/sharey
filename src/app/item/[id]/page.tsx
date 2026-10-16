@@ -127,7 +127,38 @@ export default function PublicSingleItemPage() {
     try {
       setLoading(true);
 
-      // Fetch via public API endpoint first
+      // 1. Fetch via RPC get_shared_item_data first (bypasses RLS safely)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_shared_item_data', {
+        p_item_id: id
+      });
+
+      if (!rpcError && rpcData && rpcData.item) {
+        const data = rpcData.item;
+        const files = parseFileAttachments(data.content, data.file_url, data.file_name, data.type as ItemType);
+
+        setItem({
+          id: data.id,
+          type: data.type as ItemType,
+          title: data.title,
+          content: data.content,
+          fileName: data.file_name,
+          fileSize: data.file_size,
+          fileUrl: data.file_url,
+          fileItems: files,
+          collectionId: data.collection_id,
+          createdAt: new Date(data.created_at)
+        });
+
+        if (rpcData.collection) {
+          setCollection(rpcData.collection);
+          if (rpcData.collection.is_private && rpcData.collection.pin) {
+            setIsUnlocked(false);
+          }
+        }
+        return;
+      }
+
+      // 2. Fetch via public API endpoint fallback
       const res = await fetch(`/api/item/${id}`);
       if (res.ok) {
         const json = await res.json();
@@ -158,7 +189,7 @@ export default function PublicSingleItemPage() {
         }
       }
 
-      // Fallback to direct supabase query
+      // 3. Fallback to direct supabase query
       const { data, error } = await supabase
         .from('shared_items')
         .select('*')

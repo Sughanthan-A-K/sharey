@@ -103,6 +103,7 @@ export default function Home() {
 
   // Drag Reorder Collection State
   const [draggedCollectionIndex, setDraggedCollectionIndex] = useState<number | null>(null);
+  const isDraggingCollectionRef = useRef<boolean>(false);
 
   // Collections State
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -482,11 +483,16 @@ export default function Home() {
   };
 
   const handleCollectionDragStart = (e: React.DragEvent, index: number) => {
+    isDraggingCollectionRef.current = true;
     setDraggedCollectionIndex(index);
     e.dataTransfer.setData('collectionIndex', index.toString());
   };
 
   const handleCollectionReorderDrop = (targetIndex: number) => {
+    setTimeout(() => {
+      isDraggingCollectionRef.current = false;
+    }, 150);
+
     if (draggedCollectionIndex === null || draggedCollectionIndex === targetIndex) {
       setDraggedCollectionIndex(null);
       setDragOverCollectionReorderIndex(null);
@@ -1364,115 +1370,144 @@ export default function Home() {
                 </div>
               </button>
               
-              {collections.map((col, index) => (
-                <div 
-                  key={col.id} 
-                  draggable
-                  onDragStart={(e) => handleCollectionDragStart(e, index)}
-                  onDragOver={(e) => {
-                    handleDragOver(e, col.id);
-                    e.preventDefault();
-                    if (draggedCollectionIndex !== null && dragOverCollectionReorderIndex !== index) {
-                      setDragOverCollectionReorderIndex(index);
-                    }
-                  }}
-                  onDragLeave={(e) => {
-                    handleDragLeave(e);
-                    if (dragOverCollectionReorderIndex === index) {
+              {collections.map((col, index) => {
+                const searchQ = searchQuery.toLowerCase().trim();
+                const matchingItemsCount = searchQ ? items.filter(it => {
+                  if (it.collectionId !== col.id) return false;
+                  return (it.title && it.title.toLowerCase().includes(searchQ)) ||
+                    it.content.toLowerCase().includes(searchQ) ||
+                    (it.fileName && it.fileName.toLowerCase().includes(searchQ)) ||
+                    (it.fileItems && it.fileItems.some(fi => fi.name.toLowerCase().includes(searchQ)));
+                }).length : 0;
+
+                return (
+                <div key={col.id} className="relative">
+                  {/* Drop Indicator Line */}
+                  {dragOverCollectionReorderIndex === index && (
+                    <div className="absolute -top-1.5 left-0 right-0 h-1 bg-indigo-500 rounded-full z-10 shadow-sm animate-pulse" />
+                  )}
+                  <div 
+                    draggable
+                    onDragStart={(e) => handleCollectionDragStart(e, index)}
+                    onDragEnd={() => {
+                      setDraggedCollectionIndex(null);
                       setDragOverCollectionReorderIndex(null);
-                    }
-                  }}
-                  onDrop={(e) => {
-                    const collectionIndexData = e.dataTransfer.getData('collectionIndex');
-                    if (collectionIndexData !== '') {
+                      setTimeout(() => {
+                        isDraggingCollectionRef.current = false;
+                      }, 150);
+                    }}
+                    onDragOver={(e) => {
+                      handleDragOver(e, col.id);
                       e.preventDefault();
-                      e.stopPropagation();
-                      handleCollectionReorderDrop(index);
-                    } else {
-                      handleDropToCollection(e, col.id);
-                    }
-                  }}
-                  className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                    activeCollection === col.id
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
-                    dragOverCollectionReorderIndex === index ? 'border-t-2 border-indigo-500 scale-[1.01]' : ''
-                  }`}
-                  onClick={() => {
-                    if (activeCollection === col.id) return;
-                    if (col.isPrivate && col.pin) {
-                      setPinPromptConfig({ collectionId: col.id, action: 'access' });
-                      setPinInputValue('');
-                    } else {
-                      handleSelectActiveCollection(col.id);
-                    }
-                  }}
-                >
-                  <div className="flex items-center gap-2 pr-2 min-w-0 flex-1">
-                    <div 
-                      className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 p-0.5"
-                      title="Drag to reorder collection"
-                    >
-                      <GripVertical className="w-3.5 h-3.5" />
+                      if (draggedCollectionIndex !== null && dragOverCollectionReorderIndex !== index) {
+                        setDragOverCollectionReorderIndex(index);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      handleDragLeave(e);
+                      if (dragOverCollectionReorderIndex === index) {
+                        setDragOverCollectionReorderIndex(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      const collectionIndexData = e.dataTransfer.getData('collectionIndex');
+                      if (collectionIndexData !== '') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleCollectionReorderDrop(index);
+                      } else {
+                        handleDropToCollection(e, col.id);
+                      }
+                    }}
+                    className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      activeCollection === col.id
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
+                      draggedCollectionIndex === index ? 'opacity-40 scale-[0.98]' : ''
+                    } ${matchingItemsCount > 0 && activeCollection !== col.id ? 'border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/20' : ''}`}
+                    onClick={() => {
+                      if (isDraggingCollectionRef.current) return;
+                      if (activeCollection === col.id) return;
+                      if (col.isPrivate && col.pin) {
+                        setPinPromptConfig({ collectionId: col.id, action: 'access' });
+                        setPinInputValue('');
+                      } else {
+                        handleSelectActiveCollection(col.id);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-2 pr-2 min-w-0 flex-1">
+                      <div 
+                        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 p-0.5"
+                        title="Drag to reorder collection"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+                      {col.isPrivate ? (
+                        <Lock className="w-4 h-4 text-gray-400 shrink-0" />
+                      ) : (
+                        <Folder className="w-4 h-4 text-gray-400 shrink-0" />
+                      )}
+                      <span className="truncate">{col.name}</span>
+                      {matchingItemsCount > 0 && (
+                        <span className="ml-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 shrink-0 animate-in fade-in" title={`${matchingItemsCount} matching item${matchingItemsCount > 1 ? 's' : ''}`}>
+                          {matchingItemsCount}
+                        </span>
+                      )}
                     </div>
-                    {col.isPrivate ? (
-                      <Lock className="w-4 h-4 text-gray-400 shrink-0" />
-                    ) : (
-                      <Folder className="w-4 h-4 text-gray-400 shrink-0" />
-                    )}
-                    <span className="truncate">{col.name}</span>
-                  </div>
-                  <div className="flex items-center shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (col.isPrivate && col.pin) {
-                          setPinPromptConfig({ collectionId: col.id, action: 'edit' });
-                          setPinInputValue('');
-                        } else {
-                          setEditCollectionTarget(col);
-                          setCollectionInputValue(col.name);
-                          setIsCollectionPrivate(col.isPrivate || false);
-                          setCollectionPin(col.pin || '');
-                          setShowCollectionModal(true);
-                        }
-                      }}
-                      className="p-1 text-gray-400 hover:text-indigo-600"
-                      title="Edit Collection"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const link = `${window.location.origin}/c/${col.id}`;
-                        navigator.clipboard.writeText(link);
-                        showNotification('Collection link copied to clipboard!', 'success');
-                      }}
-                      className="p-1 text-gray-400 hover:text-green-600"
-                      title="Copy public link"
-                    >
-                      <LinkIcon className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (col.isPrivate && col.pin) {
-                          setPinPromptConfig({ collectionId: col.id, action: 'delete' });
-                          setPinInputValue('');
-                        } else {
-                          setDeleteCollectionTarget(col.id);
-                        }
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                      title="Delete Collection"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (col.isPrivate && col.pin) {
+                            setPinPromptConfig({ collectionId: col.id, action: 'edit' });
+                            setPinInputValue('');
+                          } else {
+                            setEditCollectionTarget(col);
+                            setCollectionInputValue(col.name);
+                            setIsCollectionPrivate(col.isPrivate || false);
+                            setCollectionPin(col.pin || '');
+                            setShowCollectionModal(true);
+                          }
+                        }}
+                        className="p-1 text-gray-400 hover:text-indigo-600"
+                        title="Edit Collection"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = `${window.location.origin}/c/${col.id}`;
+                          navigator.clipboard.writeText(link);
+                          showNotification('Collection link copied to clipboard!', 'success');
+                        }}
+                        className="p-1 text-gray-400 hover:text-green-600"
+                        title="Copy public link"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (col.isPrivate && col.pin) {
+                            setPinPromptConfig({ collectionId: col.id, action: 'delete' });
+                            setPinInputValue('');
+                          } else {
+                            setDeleteCollectionTarget(col.id);
+                          }
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                        title="Delete Collection"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
               
               {collections.length === 0 && (
                 <div className="text-center py-4 text-xs text-gray-500">
@@ -1536,12 +1571,31 @@ export default function Home() {
                     <span className="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md uppercase tracking-wider shrink-0">
                       {item.type}
                     </span>
-                    {item.collectionId && collections.find(c => c.id === item.collectionId) && (
-                      <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap max-w-[120px] sm:max-w-[200px] truncate">
-                        <Folder className="w-3 h-3 shrink-0" />
-                        <span className="truncate">{collections.find(c => c.id === item.collectionId)?.name}</span>
-                      </span>
-                    )}
+                    {item.collectionId && collections.find(c => c.id === item.collectionId) && (() => {
+                      const parentCol = collections.find(c => c.id === item.collectionId)!;
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (parentCol.isPrivate && parentCol.pin) {
+                              setPinPromptConfig({ collectionId: parentCol.id, action: 'access' });
+                              setPinInputValue('');
+                            } else {
+                              handleSelectActiveCollection(parentCol.id);
+                              if (searchQuery.trim()) {
+                                setSearchScope('current');
+                              }
+                            }
+                          }}
+                          className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap max-w-[140px] sm:max-w-[200px] truncate transition-colors cursor-pointer group/coltag"
+                          title={`View in ${parentCol.name} collection`}
+                        >
+                          {parentCol.isPrivate ? <Lock className="w-3 h-3 shrink-0" /> : <Folder className="w-3 h-3 shrink-0" />}
+                          <span className="truncate group-hover/coltag:underline">{parentCol.name}</span>
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2187,7 +2241,10 @@ export default function Home() {
                     const col = collections.find(c => c.id === pinPromptConfig.collectionId);
                     if (col && col.pin === pinInputValue) {
                       if (pinPromptConfig.action === 'access') {
-                        setActiveCollection(pinPromptConfig.collectionId);
+                        handleSelectActiveCollection(pinPromptConfig.collectionId);
+                        if (searchQuery.trim()) {
+                          setSearchScope('current');
+                        }
                         setIsUnlockedBlinking(true);
                         setTimeout(() => setIsUnlockedBlinking(false), 1500);
                       } else if (pinPromptConfig.action === 'edit') {
@@ -2229,6 +2286,9 @@ export default function Home() {
                   if (col && col.pin === pinInputValue) {
                     if (pinPromptConfig.action === 'access') {
                       handleSelectActiveCollection(pinPromptConfig.collectionId);
+                      if (searchQuery.trim()) {
+                        setSearchScope('current');
+                      }
                       setIsUnlockedBlinking(true);
                       setTimeout(() => setIsUnlockedBlinking(false), 1500);
                     } else if (pinPromptConfig.action === 'edit') {
