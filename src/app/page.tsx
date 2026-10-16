@@ -1382,22 +1382,40 @@ export default function Home() {
 
                 return (
                 <div key={col.id} className="relative">
-                  {/* Drop Indicator Line */}
-                  {dragOverCollectionReorderIndex === index && (
-                    <div className="absolute -top-1.5 left-0 right-0 h-1 bg-indigo-500 rounded-full z-10 shadow-sm animate-pulse" />
+                  {/* Dedicated Drop Target Placeholder (Exact Collection Height) */}
+                  {draggedCollectionIndex !== null && dragOverCollectionReorderIndex === index && (
+                    <div 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleCollectionReorderDrop(index);
+                      }}
+                      className="w-full h-11 my-1 rounded-xl border-2 border-dashed border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/40 flex items-center justify-center text-xs font-semibold text-indigo-600 dark:text-indigo-400 animate-in fade-in duration-150 shadow-inner"
+                    >
+                      <span>Drop collection here</span>
+                    </div>
                   )}
+
                   <div 
                     onDragOver={(e) => {
-                      handleDragOver(e, col.id);
                       e.preventDefault();
-                      if (draggedCollectionIndex !== null && dragOverCollectionReorderIndex !== index) {
-                        setDragOverCollectionReorderIndex(index);
+                      if (draggedCollectionIndex !== null) {
+                        // Reordering collections: set insertion target to this index
+                        if (dragOverCollectionReorderIndex !== index) {
+                          setDragOverCollectionReorderIndex(index);
+                        }
+                      } else {
+                        // Dragging a card into a collection
+                        handleDragOver(e, col.id);
                       }
                     }}
                     onDragLeave={(e) => {
-                      handleDragLeave(e);
-                      if (dragOverCollectionReorderIndex === index) {
-                        setDragOverCollectionReorderIndex(null);
+                      if (draggedCollectionIndex === null) {
+                        handleDragLeave(e);
                       }
                     }}
                     onDrop={(e) => {
@@ -1414,8 +1432,8 @@ export default function Home() {
                       activeCollection === col.id
                         ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-300 dark:ring-indigo-700'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
-                      draggedCollectionIndex === index ? 'opacity-40 scale-[0.98]' : ''
+                    } ${draggedCollectionIndex === null && dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
+                      draggedCollectionIndex === index ? 'opacity-30 scale-[0.98]' : ''
                     } ${matchingItemsCount > 0 && activeCollection !== col.id ? 'border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/20' : ''}`}
                     onClick={() => {
                       if (isDraggingCollectionRef.current) return;
@@ -1521,6 +1539,24 @@ export default function Home() {
               {collections.length === 0 && (
                 <div className="text-center py-4 text-xs text-gray-500">
                   No collections yet
+                </div>
+              )}
+
+              {/* End of list drop placeholder when dragging to the bottom */}
+              {draggedCollectionIndex !== null && dragOverCollectionReorderIndex === collections.length && (
+                <div 
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCollectionReorderDrop(collections.length - 1);
+                  }}
+                  className="w-full h-11 my-1 rounded-xl border-2 border-dashed border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/40 flex items-center justify-center text-xs font-semibold text-indigo-600 dark:text-indigo-400 animate-in fade-in duration-150 shadow-inner"
+                >
+                  <span>Drop collection here</span>
                 </div>
               )}
             </div>
