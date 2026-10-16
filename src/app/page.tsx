@@ -1387,15 +1387,6 @@ export default function Home() {
                     <div className="absolute -top-1.5 left-0 right-0 h-1 bg-indigo-500 rounded-full z-10 shadow-sm animate-pulse" />
                   )}
                   <div 
-                    draggable
-                    onDragStart={(e) => handleCollectionDragStart(e, index)}
-                    onDragEnd={() => {
-                      setDraggedCollectionIndex(null);
-                      setDragOverCollectionReorderIndex(null);
-                      setTimeout(() => {
-                        isDraggingCollectionRef.current = false;
-                      }, 150);
-                    }}
                     onDragOver={(e) => {
                       handleDragOver(e, col.id);
                       e.preventDefault();
@@ -1421,14 +1412,18 @@ export default function Home() {
                     }}
                     className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                       activeCollection === col.id
-                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-300 dark:ring-indigo-700'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
                       draggedCollectionIndex === index ? 'opacity-40 scale-[0.98]' : ''
                     } ${matchingItemsCount > 0 && activeCollection !== col.id ? 'border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/20' : ''}`}
                     onClick={() => {
                       if (isDraggingCollectionRef.current) return;
-                      if (activeCollection === col.id) return;
+                      // If clicking the currently selected collection, toggle unselect back to All Items
+                      if (activeCollection === col.id) {
+                        handleSelectActiveCollection(null);
+                        return;
+                      }
                       if (col.isPrivate && col.pin) {
                         setPinPromptConfig({ collectionId: col.id, action: 'access' });
                         setPinInputValue('');
@@ -1439,8 +1434,22 @@ export default function Home() {
                   >
                     <div className="flex items-center gap-2 pr-2 min-w-0 flex-1">
                       <div 
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          handleCollectionDragStart(e, index);
+                        }}
+                        onDragEnd={(e) => {
+                          e.stopPropagation();
+                          setDraggedCollectionIndex(null);
+                          setDragOverCollectionReorderIndex(null);
+                          setTimeout(() => {
+                            isDraggingCollectionRef.current = false;
+                          }, 150);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                         className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 p-0.5"
-                        title="Drag to reorder collection"
+                        title="Drag handle to reorder collection"
                       >
                         <GripVertical className="w-3.5 h-3.5" />
                       </div>
