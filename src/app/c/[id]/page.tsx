@@ -304,39 +304,63 @@ export default function PublicCollectionPage() {
                   {/* Attached Files & Gallery */}
                   {cardFiles.length > 0 && (
                     <div className="space-y-3 pt-1">
-                      {/* Image Grid / Gallery */}
-                      {cardFiles.filter(f => f.type === 'image').length > 0 && (
-                        <div className={`grid gap-2 ${
-                          cardFiles.filter(f => f.type === 'image').length === 1 
-                            ? 'grid-cols-1' 
-                            : cardFiles.filter(f => f.type === 'image').length === 2 
-                              ? 'grid-cols-2' 
-                              : 'grid-cols-2 sm:grid-cols-3'
-                        }`}>
-                          {cardFiles.filter(f => f.type === 'image').map((f, imgIdx) => (
-                            <div 
-                              key={imgIdx} 
-                              onClick={() => openGalleryAt(cardFiles, cardFiles.findIndex(file => file.url === f.url))}
-                              className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img 
-                                src={f.url} 
-                                alt={f.name} 
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
-                                loading="lazy" 
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {/* Unified Visual Media Grid (Images and Videos Side-by-Side) */}
+                      {(() => {
+                        const visualFiles = cardFiles.filter(f => f.type === 'image' || f.type === 'video');
+                        if (visualFiles.length === 0) return null;
 
-                      {/* Video Files */}
-                      {cardFiles.filter(f => f.type === 'video').map((f, vIdx) => (
-                        <div key={vIdx} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black aspect-video flex">
-                          <video src={f.url} controls playsInline className="w-full h-full object-contain" />
-                        </div>
-                      ))}
+                        const maxVisible = 4;
+                        const visibleFiles = visualFiles.slice(0, maxVisible);
+                        const remainingCount = visualFiles.length - maxVisible;
+
+                        const gridColsClass = visualFiles.length === 1 
+                          ? 'grid-cols-1' 
+                          : visualFiles.length === 2 
+                            ? 'grid-cols-2' 
+                            : 'grid-cols-2 sm:grid-cols-3';
+
+                        return (
+                          <div className={`grid gap-2 ${gridColsClass}`}>
+                            {visibleFiles.map((f, vIdx) => {
+                              const originalIdx = cardFiles.findIndex(file => file.url === f.url);
+                              const isLast = vIdx === maxVisible - 1 && remainingCount > 0;
+
+                              return (
+                                <div 
+                                  key={vIdx} 
+                                  onClick={() => openGalleryAt(cardFiles, originalIdx)}
+                                  className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group"
+                                >
+                                  {f.type === 'image' ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img 
+                                      src={f.url} 
+                                      alt={f.name} 
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
+                                      loading="lazy" 
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full bg-black relative flex items-center justify-center">
+                                      <video src={f.url} className="w-full h-full object-cover" />
+                                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-white/80 dark:bg-black/80 flex items-center justify-center text-gray-900 dark:text-white shadow-md">
+                                          <Video className="w-5 h-5" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {isLast && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-xs">
+                                      +{remainingCount + 1}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       {/* Document / Other files */}
                       {cardFiles.filter(f => f.type === 'file').map((f, docIdx) => (

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { 
   FileText, Video, File as FileIcon, Image as ImageIcon, Link as LinkIcon, 
-  ExternalLink, Download, Loader2, X, AlertTriangle, Copy, CheckCircle2, ChevronLeft, ChevronRight, Share2
+  ExternalLink, Download, Loader2, X, AlertTriangle, Copy, CheckCircle2, ChevronLeft, ChevronRight, Share2,
+  Lock, Eye, EyeOff
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { SharedItem, ItemType, ItemFileAttachment } from '@/types';
@@ -18,6 +19,11 @@ export default function PublicSingleItemPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState<SharedItem | null>(null);
+  const [collection, setCollection] = useState<{ id: string; name: string; is_private: boolean; pin?: string | null } | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(true);
+  const [pinInput, setPinInput] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [pinError, setPinError] = useState(false);
   
   // Gallery & Preview
   const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
@@ -145,11 +151,35 @@ export default function PublicSingleItemPage() {
         collectionId: data.collection_id,
         createdAt: new Date(data.created_at)
       });
+
+      if (data.collection_id) {
+        const { data: colData } = await supabase
+          .from('collections')
+          .select('id, name, is_private, pin')
+          .eq('id', data.collection_id)
+          .single();
+
+        if (colData) {
+          setCollection(colData);
+          if (colData.is_private && colData.pin) {
+            setIsUnlocked(false);
+          }
+        }
+      }
     } catch (err: any) {
       console.error('Fetch error:', err);
       setError('Could not load item');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUnlock = () => {
+    if (collection?.pin === pinInput) {
+      setIsUnlocked(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
     }
   };
 
@@ -181,6 +211,51 @@ export default function PublicSingleItemPage() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Oops!</h2>
           <p className="text-gray-600 dark:text-gray-400">{error || 'Item not found'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isUnlocked && collection) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full border border-gray-200 dark:border-gray-800 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-7 h-7" />
+          </div>
+          <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-gray-100 mb-2">{collection.name}</h2>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-8">This item belongs to a private collection. Please enter the PIN to view it.</p>
+          
+          <div className="relative mb-6">
+            <input 
+              type={showPin ? "text" : "password"}
+              value={pinInput}
+              onChange={e => {
+                setPinInput(e.target.value);
+                setPinError(false);
+              }}
+              placeholder="Enter PIN"
+              className={`w-full bg-gray-50 dark:bg-gray-800 border ${pinError ? 'border-red-500 focus:border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-500'} rounded-xl px-4 py-3.5 outline-none text-gray-900 dark:text-gray-100 pr-12 transition-colors`}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleUnlock(); }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPin(!showPin)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+            {pinError && <p className="text-red-500 text-sm mt-2 absolute">Incorrect PIN. Try again.</p>}
+          </div>
+
+          <button 
+            onClick={handleUnlock}
+            disabled={!pinInput.trim()}
+            className="w-full px-4 py-3.5 mt-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            Unlock Item
+          </button>
         </div>
       </div>
     );
@@ -263,41 +338,52 @@ export default function PublicSingleItemPage() {
           {/* Attached Files & Gallery */}
           {files.length > 0 && (
             <div className="space-y-4 pt-2">
-              {/* Image Grid / Carousel Trigger */}
-              {files.filter(f => f.type === 'image').length > 0 && (
-                <div className="space-y-2">
-                  <div className={`grid gap-2.5 ${
-                    files.filter(f => f.type === 'image').length === 1 
-                      ? 'grid-cols-1' 
-                      : files.filter(f => f.type === 'image').length === 2 
-                        ? 'grid-cols-2' 
-                        : 'grid-cols-2 sm:grid-cols-3'
-                  }`}>
-                    {files.filter(f => f.type === 'image').map((f, imgIdx) => (
-                      <div 
-                        key={imgIdx} 
-                        onClick={() => openGalleryAt(files, files.findIndex(file => file.url === f.url))}
-                        className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-square group shadow-sm"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                          src={f.url} 
-                          alt={f.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                          loading="lazy" 
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Unified Visual Media Grid (Images and Videos Side-by-Side) */}
+              {(() => {
+                const visualFiles = files.filter(f => f.type === 'image' || f.type === 'video');
+                if (visualFiles.length === 0) return null;
 
-              {/* Videos */}
-              {files.filter(f => f.type === 'video').map((f, vIdx) => (
-                <div key={vIdx} className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black aspect-video flex">
-                  <video src={f.url} controls playsInline className="w-full h-full object-contain" />
-                </div>
-              ))}
+                const gridColsClass = visualFiles.length === 1 
+                  ? 'grid-cols-1' 
+                  : visualFiles.length === 2 
+                    ? 'grid-cols-2' 
+                    : 'grid-cols-2 sm:grid-cols-3';
+
+                return (
+                  <div className={`grid gap-2.5 ${gridColsClass}`}>
+                    {visualFiles.map((f, vIdx) => {
+                      const originalIdx = files.findIndex(file => file.url === f.url);
+
+                      return (
+                        <div 
+                          key={vIdx} 
+                          onClick={() => openGalleryAt(files, originalIdx)}
+                          className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group shadow-sm"
+                        >
+                          {f.type === 'image' ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img 
+                              src={f.url} 
+                              alt={f.name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                              loading="lazy" 
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-black relative flex items-center justify-center">
+                              <video src={f.url} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-white/80 dark:bg-black/80 flex items-center justify-center text-gray-900 dark:text-white shadow-md">
+                                  <Video className="w-5 h-5" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Document / generic files list */}
               {files.filter(f => f.type === 'file').map((f, docIdx) => (

@@ -91,6 +91,7 @@ export default function Home() {
   const [editValue, setEditValue] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editAttachedFiles, setEditAttachedFiles] = useState<File[]>([]);
+  const [editExistingFiles, setEditExistingFiles] = useState<ItemFileAttachment[]>([]);
   const [editFileRemoved, setEditFileRemoved] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -102,6 +103,7 @@ export default function Home() {
   const [editCollectionTarget, setEditCollectionTarget] = useState<Collection | null>(null);
   const [deleteCollectionTarget, setDeleteCollectionTarget] = useState<string | null>(null);
   const [selectedCollectionForUpload, setSelectedCollectionForUpload] = useState<string | null>(null);
+  const [confirmModalCollectionSearch, setConfirmModalCollectionSearch] = useState('');
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<string | 'all' | null>(null);
   const [isUploadDropdownOpen, setIsUploadDropdownOpen] = useState(false);
@@ -149,63 +151,8 @@ export default function Home() {
     }
 
     try {
-      let isFirst = true;
-
-      const processPayload = async (payload: any) => {
-        const finalPayload = { ...payload, collection_id: editItemCollectionId };
-        if (isFirst) {
-          const { error } = await supabase.from('shared_items').update(finalPayload).eq('id', editTarget.id);
-          if (error) throw error;
-          isFirst = false;
-        } else {
-          const { error } = await supabase.from('shared_items').insert({ ...finalPayload, user_id: user.id });
-          if (error) throw error;
-        }
-      };
-
-      // 1. Process Text
-      if (editValue.trim()) {
-        let finalType = 'text';
-        if (editValue.trim().match(/^(https?:\/\/[^\s]+)$/g)) {
-          finalType = 'link';
-        }
-        await processPayload({
-          title: editTitle.trim() || null,
-          content: editValue.trim(),
-          type: finalType,
-          file_name: null,
-          file_url: null,
-          file_size: null,
-          mime_type: null
-        });
-      }
-
-      // 2. Process existing file (if not removed)
-      if (editTarget.type !== 'text' && editTarget.type !== 'link' && !editFileRemoved) {
-        if (isFirst) {
-           // We update the existing item to apply the potential new collection_id
-           await processPayload({
-             title: editTitle.trim() || null,
-             content: editTarget.fileName,
-             type: editTarget.type,
-             file_name: editTarget.fileName,
-             file_url: editTarget.fileUrl,
-             file_size: editTarget.fileSize,
-           });
-        } else {
-           // Text took the first slot, so insert the existing file as a new item
-           await processPayload({
-             title: editTitle.trim() || null,
-             content: editTarget.fileName,
-             type: editTarget.type,
-             file_name: editTarget.fileName,
-             file_url: editTarget.fileUrl,
-             file_size: editTarget.fileSize,
-           });
-        }
-      }
-
-      // 3. Process new attached files
+      // 1. Upload any newly attached files
+      const newUploadedAttachments: ItemFileAttachment[] = [];
       for (const file of editAttachedFiles) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -216,23 +163,71 @@ export default function Home() {
 
         const { data: { publicUrl } } = supabase.storage.from('sharey_files').getPublicUrl(filePath);
 
-        await processPayload({
-          title: editTitle.trim() || null,
-          file_name: file.name,
-          content: file.name,
-          file_url: publicUrl,
-          file_size: formatFileSize(file.size),
+        newUploadedAttachments.push({
+          name: file.name,
+          size: formatFileSize(file.size),
+          url: publicUrl,
           type: getFileType(file),
-          mime_type: file.type
+          mimeType: file.type
         });
       }
 
-      // Instead of manual optimistic UI for splits, just re-fetch to ensure correctness
+      // Combine remaining existing files and new uploads
+      const combinedFiles: ItemFileAttachment[] = [...editExistingFiles, ...newUploadedAttachments];
+      const trimmedText = editValue.trim();
+      const trimmedTitle = editTitle.trim() || null;
+
+      if (combinedFiles.length > 0) {
+        // Multi-file payload format
+        const primaryType = combinedFiles.some(f => f.type === 'image') ? 'image' : combinedFiles[0].type;
+        const multiPayload = {
+          __sharey_multi__: true,
+          text: trimmedText,
+          files: combinedFiles
+        };
+
+        const { error } = await supabase
+          .from('shared_items')
+          .update({
+            title: trimmedTitle,
+            type: primaryType,
+            content: JSON.stringify(multiPayload),
+            file_name: combinedFiles[0].name,
+            file_size: combinedFiles[0].size,
+            file_url: combinedFiles[0].url,
+            mime_type: combinedFiles[0].mimeType,
+            collection_id: editItemCollectionId
+          })
+          .eq('id', editTarget.id);
+
+        if (error) throw error;
+      } else {
+        // Plain text or link (all files removed or never had files)
+        const finalType = detectType(trimmedText);
+        const { error } = await supabase
+          .from('shared_items')
+          .update({
+            title: trimmedTitle,
+            type: finalType,
+            content: trimmedText,
+            file_name: null,
+            file_size: null,
+            file_url: null,
+            mime_type: null,
+            collection_id: editItemCollectionId
+          })
+          .eq('id', editTarget.id);
+
+        if (error) throw error;
+      }
+
       await fetchItems();
 
       setEditTarget(null);
       setEditValue('');
+      setEditTitle('');
       setEditAttachedFiles([]);
+      setEditExistingFiles([]);
       setEditFileRemoved(false);
       
       setToastMsg("Updated successfully");
@@ -240,7 +235,7 @@ export default function Home() {
       setTimeout(() => setShowToast(false), 3000);
     } catch (err: any) {
       console.error("Upload error:", err);
-      setToastMsg(err.message || "Failed to update file. It might be too large.");
+      setToastMsg(err.message || "Failed to update item.");
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
     } finally {
@@ -250,8 +245,21 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    const savedCol = localStorage.getItem('sharey_active_collection');
+    if (savedCol) {
+      setActiveCollection(savedCol);
+    }
     fetchItems();
   }, []);
+
+  const handleSelectActiveCollection = (colId: string | null) => {
+    setActiveCollection(colId);
+    if (colId) {
+      localStorage.setItem('sharey_active_collection', colId);
+    } else {
+      localStorage.removeItem('sharey_active_collection');
+    }
+  };
 
   useEffect(() => {
     setSelectedCollectionForUpload(activeCollection);
@@ -412,7 +420,7 @@ export default function Home() {
     } else {
       showNotification('Collection deleted');
       if (activeCollection === deleteCollectionTarget) {
-        setActiveCollection(null);
+        handleSelectActiveCollection(null);
       }
       setDeleteCollectionTarget(null);
       fetchItems();
@@ -878,11 +886,14 @@ export default function Home() {
     if (!editTarget) return false;
     
     // 1. Text changed?
-    const originalText = (editTarget.type === 'text' || editTarget.type === 'link') ? editTarget.content : '';
-    const textChanged = editValue.trim() !== originalText;
+    const originalText = getDisplayContent(editTarget);
+    const textChanged = editValue.trim() !== originalText.trim();
     
-    // 2. Original file removed?
-    const fileRemoved = editFileRemoved;
+    // 2. Existing files changed (removed any)?
+    const initialFiles = editTarget.fileItems && editTarget.fileItems.length > 0
+      ? editTarget.fileItems
+      : (editTarget.fileUrl ? [{ name: editTarget.fileName || 'file', url: editTarget.fileUrl, type: editTarget.type }] : []);
+    const filesRemoved = editExistingFiles.length !== initialFiles.length;
     
     // 3. New files attached?
     const newFilesAdded = editAttachedFiles.length > 0;
@@ -892,9 +903,9 @@ export default function Home() {
 
     // 5. Title changed?
     const originalTitle = editTarget.title || '';
-    const titleChanged = editTitle.trim() !== originalTitle;
+    const titleChanged = editTitle.trim() !== originalTitle.trim();
 
-    return textChanged || fileRemoved || newFilesAdded || collectionChanged || titleChanged;
+    return textChanged || filesRemoved || newFilesAdded || collectionChanged || titleChanged;
   };
 
   return (
@@ -1174,7 +1185,7 @@ export default function Home() {
             
             <div className="flex flex-col gap-1.5 mt-3">
               <button
-                onClick={() => setActiveCollection(null)}
+                onClick={() => handleSelectActiveCollection(null)}
                 onDragOver={(e) => handleDragOver(e, null)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDropToCollection(e, null)}
@@ -1207,7 +1218,7 @@ export default function Home() {
                       setPinPromptConfig({ collectionId: col.id, action: 'access' });
                       setPinInputValue('');
                     } else {
-                      setActiveCollection(col.id);
+                      handleSelectActiveCollection(col.id);
                     }
                   }}
                 >
@@ -1373,39 +1384,64 @@ export default function Home() {
                   {/* Attached Files & Gallery */}
                   {cardFiles.length > 0 && (
                     <div className="space-y-3 pt-1">
-                      {/* Image Grid / Gallery */}
-                      {cardFiles.filter(f => f.type === 'image').length > 0 && (
-                        <div className={`grid gap-2 ${
-                          cardFiles.filter(f => f.type === 'image').length === 1 
-                            ? 'grid-cols-1' 
-                            : cardFiles.filter(f => f.type === 'image').length === 2 
-                              ? 'grid-cols-2' 
-                              : 'grid-cols-2 sm:grid-cols-3'
-                        }`}>
-                          {cardFiles.filter(f => f.type === 'image').map((f, imgIdx) => (
-                            <div 
-                              key={imgIdx} 
-                              onClick={() => openGalleryAt(cardFiles, cardFiles.findIndex(file => file.url === f.url))}
-                              className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img 
-                                src={f.url} 
-                                alt={f.name} 
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
-                                loading="lazy" 
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {/* Unified Visual Media Grid (Images and Videos Side-by-Side) */}
+                      {(() => {
+                        const visualFiles = cardFiles.filter(f => f.type === 'image' || f.type === 'video');
+                        if (visualFiles.length === 0) return null;
 
-                      {/* Video Files */}
-                      {cardFiles.filter(f => f.type === 'video').map((f, vIdx) => (
-                        <div key={vIdx} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black aspect-video flex">
-                          <video src={f.url} controls playsInline className="w-full h-full object-contain" />
-                        </div>
-                      ))}
+                        const maxVisible = 4;
+                        const visibleFiles = visualFiles.slice(0, maxVisible);
+                        const remainingCount = visualFiles.length - maxVisible;
+
+                        const gridColsClass = visualFiles.length === 1 
+                          ? 'grid-cols-1' 
+                          : visualFiles.length === 2 
+                            ? 'grid-cols-2' 
+                            : 'grid-cols-2 sm:grid-cols-3';
+
+                        return (
+                          <div className={`grid gap-2 ${gridColsClass}`}>
+                            {visibleFiles.map((f, vIdx) => {
+                              const originalIdx = cardFiles.findIndex(file => file.url === f.url);
+                              const isLast = vIdx === maxVisible - 1 && remainingCount > 0;
+
+                              return (
+                                <div 
+                                  key={vIdx} 
+                                  onClick={() => openGalleryAt(cardFiles, originalIdx)}
+                                  className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 cursor-pointer bg-gray-50 dark:bg-gray-950 aspect-video group"
+                                >
+                                  {f.type === 'image' ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img 
+                                      src={f.url} 
+                                      alt={f.name} 
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
+                                      loading="lazy" 
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full bg-black relative flex items-center justify-center">
+                                      <video src={f.url} className="w-full h-full object-cover" />
+                                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-white/80 dark:bg-black/80 flex items-center justify-center text-gray-900 dark:text-white shadow-md">
+                                          <Video className="w-5 h-5" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* +More Badge Overlay if exceeding maxVisible */}
+                                  {isLast && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl backdrop-blur-xs">
+                                      +{remainingCount + 1}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       {/* Document / Other files */}
                       {cardFiles.filter(f => f.type === 'file').map((f, docIdx) => (
@@ -1465,6 +1501,10 @@ export default function Home() {
                     setEditTitle(item.title || '');
                     setEditValue(textContent);
                     setEditAttachedFiles([]);
+                    const existing = item.fileItems && item.fileItems.length > 0 
+                      ? [...item.fileItems] 
+                      : (item.fileUrl ? [{ name: item.fileName || 'file', size: item.fileSize, url: item.fileUrl, type: item.type }] : []);
+                    setEditExistingFiles(existing);
                     setEditFileRemoved(false);
                     setEditItemCollectionId(item.collectionId || null);
                   }} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors">
@@ -1622,26 +1662,32 @@ export default function Home() {
                 disabled={isSavingEdit}
               />
 
-              {/* Existing File Preview */}
-              {editTarget.type !== 'text' && editTarget.type !== 'link' && !editFileRemoved && (
+              {/* Existing Files Preview (Supports multi-file) */}
+              {editExistingFiles.length > 0 && (
                 <div className="flex flex-wrap gap-3 mb-4">
-                  <div className="relative group flex items-center gap-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl">
-                    <div className="p-2 bg-white dark:bg-gray-900 rounded-lg text-indigo-600 dark:text-indigo-400">
-                      {getIconForType(editTarget.type)}
+                  {editExistingFiles.map((file, i) => (
+                    <div key={i} className="relative group flex items-center gap-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl">
+                      <div className="p-2 bg-white dark:bg-gray-900 rounded-lg text-indigo-600 dark:text-indigo-400">
+                        {getIconForType(file.type)}
+                      </div>
+                      <div className="flex flex-col pr-6">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 max-w-[200px] truncate">
+                          {file.name}
+                        </span>
+                        {file.size && <span className="text-xs text-gray-500">{file.size}</span>}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setEditExistingFiles(prev => prev.filter((_, idx) => idx !== i));
+                          setEditFileRemoved(true);
+                        }}
+                        className="absolute -top-2 -right-2 bg-white dark:bg-gray-700 text-gray-500 hover:text-red-500 rounded-full p-1 shadow-md border border-gray-200 dark:border-gray-600 transition-colors"
+                        title="Remove file"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <div className="flex flex-col pr-6">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 max-w-[200px] truncate">
-                        {editTarget.fileName}
-                      </span>
-                      <span className="text-xs text-gray-500">{editTarget.fileSize}</span>
-                    </div>
-                    <button 
-                      onClick={() => setEditFileRemoved(true)}
-                      className="absolute -top-2 -right-2 bg-white dark:bg-gray-700 text-gray-500 hover:text-red-500 rounded-full p-1 shadow-md border border-gray-200 dark:border-gray-600 transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -1662,6 +1708,7 @@ export default function Home() {
                       <button 
                         onClick={() => setEditAttachedFiles(editAttachedFiles.filter((_, idx) => idx !== i))}
                         className="absolute -top-2 -right-2 bg-white dark:bg-gray-700 text-gray-500 hover:text-red-500 rounded-full p-1 shadow-md border border-gray-200 dark:border-gray-600 transition-colors"
+                        title="Remove file"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1691,7 +1738,7 @@ export default function Home() {
                           return;
                         }
                         const formattedSize = formatFileSize(file.size);
-                        const inDB = items.some(item => item.fileName === file.name && item.fileSize === formattedSize);
+                        const inDB = items.some(item => (item.fileName === file.name && item.fileSize === formattedSize) || (item.fileItems && item.fileItems.some(fi => fi.name === file.name)));
                         if (inDB) {
                           dbDuplicateCount++;
                         } else {
@@ -1703,9 +1750,9 @@ export default function Home() {
                         const combined = [...prev];
                         validFiles.forEach(file => {
                           const inPending = combined.some(f => f.name === file.name && f.size === file.size);
-                          if (!inPending) {
-                            const originalFileCount = (editTarget.type !== 'text' && editTarget.type !== 'link' && !editFileRemoved) ? 1 : 0;
-                            if (combined.length + originalFileCount < 10) {
+                          const inExisting = editExistingFiles.some(f => f.name === file.name);
+                          if (!inPending && !inExisting) {
+                            if (combined.length + editExistingFiles.length < 10) {
                               combined.push(file);
                             } else {
                               limitHit = true;
@@ -1738,21 +1785,27 @@ export default function Home() {
                   <Paperclip className="w-5 h-5" />
                   <span className="hidden sm:inline">Attach</span>
                 </button>
-                {editAttachedFiles.length > 0 && (
+                {(editAttachedFiles.length > 0 || editExistingFiles.length > 0) && (
                   <button 
-                    onClick={() => setEditAttachedFiles([])}
+                    onClick={() => {
+                      setEditAttachedFiles([]);
+                      setEditExistingFiles([]);
+                      setEditFileRemoved(true);
+                    }}
                     disabled={isSavingEdit}
                     className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl transition-colors font-medium disabled:opacity-50"
                   >
                     <Trash2 className="w-5 h-5" />
-                    <span className="hidden sm:inline">Clear</span>
+                    <span className="hidden sm:inline">Clear All Files</span>
                   </button>
                 )}
                 <button 
                   onClick={() => {
                     setEditTarget(null);
                     setEditValue('');
+                    setEditTitle('');
                     setEditAttachedFiles([]);
+                    setEditExistingFiles([]);
                     setEditFileRemoved(false);
                   }}
                   disabled={isSavingEdit}
@@ -1765,7 +1818,7 @@ export default function Home() {
               
               <button 
                 onClick={handleSaveEdit}
-                disabled={isSavingEdit || !hasChanges() || (!editValue.trim() && editAttachedFiles.length === 0 && (editTarget.type === 'text' || editTarget.type === 'link' || editFileRemoved))}
+                disabled={isSavingEdit || !hasChanges() || (!editValue.trim() && editAttachedFiles.length === 0 && editExistingFiles.length === 0)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-all shadow-sm hover:shadow hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
               >
                 {isSavingEdit ? (
@@ -1960,7 +2013,7 @@ export default function Home() {
                   const col = collections.find(c => c.id === pinPromptConfig.collectionId);
                   if (col && col.pin === pinInputValue) {
                     if (pinPromptConfig.action === 'access') {
-                      setActiveCollection(pinPromptConfig.collectionId);
+                      handleSelectActiveCollection(pinPromptConfig.collectionId);
                       setIsUnlockedBlinking(true);
                       setTimeout(() => setIsUnlockedBlinking(false), 1500);
                     } else if (pinPromptConfig.action === 'edit') {
@@ -2017,19 +2070,78 @@ export default function Home() {
             </p>
 
             <div className="mb-6">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                Change Destination Collection:
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Destination Collection:
               </label>
-              <select
-                value={selectedCollectionForUpload || ''}
-                onChange={(e) => setSelectedCollectionForUpload(e.target.value || null)}
-                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500"
-              >
-                <option value="">No Collection (All Items)</option>
-                {collections.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+
+              {/* Search input for collections */}
+              {collections.length > 3 && (
+                <div className="relative mb-2">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={confirmModalCollectionSearch}
+                    onChange={(e) => setConfirmModalCollectionSearch(e.target.value)}
+                    placeholder="Search collections..."
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500"
+                  />
+                  {confirmModalCollectionSearch && (
+                    <button
+                      onClick={() => setConfirmModalCollectionSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Scrollable list of collections with clear selected state */}
+              <div className="max-h-44 overflow-y-auto custom-scrollbar border border-gray-200 dark:border-gray-700 rounded-xl p-1 bg-gray-50 dark:bg-gray-800/60 divide-y divide-gray-100 dark:divide-gray-800/40">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCollectionForUpload(null)}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                    selectedCollectionForUpload === null
+                      ? 'bg-indigo-600 text-white font-semibold'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <Folder className={`w-4 h-4 shrink-0 ${selectedCollectionForUpload === null ? 'text-white' : 'text-gray-400'}`} />
+                    <span className="truncate">No Collection (All Items)</span>
+                  </div>
+                  {selectedCollectionForUpload === null && <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />}
+                </button>
+
+                {collections
+                  .filter(c => c.name.toLowerCase().includes(confirmModalCollectionSearch.toLowerCase()))
+                  .map(c => {
+                    const isSelected = selectedCollectionForUpload === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedCollectionForUpload(c.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white font-semibold'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          {c.isPrivate ? (
+                            <Lock className={`w-4 h-4 shrink-0 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                          ) : (
+                            <Folder className={`w-4 h-4 shrink-0 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                          )}
+                          <span className="truncate">{c.name}</span>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />}
+                      </button>
+                    );
+                  })}
+              </div>
             </div>
 
             <div className="flex gap-3">
