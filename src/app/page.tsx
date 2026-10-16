@@ -9,7 +9,7 @@ import {
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
   Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown, GripVertical,
-  ChevronLeft, ChevronRight, Share2, UploadCloud
+  ChevronLeft, ChevronRight, Share2, UploadCloud, Pin
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection, ItemFileAttachment } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -95,6 +95,15 @@ export default function Home() {
   const [editFileRemoved, setEditFileRemoved] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Pinned Items State
+  const [pinnedItemIds, setPinnedItemIds] = useState<string[]>([]);
+
+  // Search Scope State ('current' or 'global')
+  const [searchScope, setSearchScope] = useState<'current' | 'global'>('current');
+
+  // Drag Reorder Collection State
+  const [draggedCollectionIndex, setDraggedCollectionIndex] = useState<number | null>(null);
+
   // Collections State
   const [collections, setCollections] = useState<Collection[]>([]);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
@@ -106,6 +115,7 @@ export default function Home() {
   const [confirmModalCollectionSearch, setConfirmModalCollectionSearch] = useState('');
   const [editItemCollectionId, setEditItemCollectionId] = useState<string | null>(null);
   const [dragOverCollectionId, setDragOverCollectionId] = useState<string | 'all' | null>(null);
+  const [dragOverCollectionReorderIndex, setDragOverCollectionReorderIndex] = useState<number | null>(null);
   const [isUploadDropdownOpen, setIsUploadDropdownOpen] = useState(false);
   
   // Private Collections State
@@ -250,8 +260,29 @@ export default function Home() {
     if (savedCol) {
       setActiveCollection(savedCol);
     }
+    const savedPins = localStorage.getItem('sharey_pinned_items');
+    if (savedPins) {
+      try {
+        setPinnedItemIds(JSON.parse(savedPins));
+      } catch (e) {}
+    }
     fetchItems();
   }, []);
+
+  const togglePinItem = (itemId: string) => {
+    setPinnedItemIds(prev => {
+      let updated: string[];
+      if (prev.includes(itemId)) {
+        updated = prev.filter(id => id !== itemId);
+        showNotification('Item unpinned');
+      } else {
+        updated = [itemId, ...prev];
+        showNotification('Item pinned to top');
+      }
+      localStorage.setItem('sharey_pinned_items', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleSelectActiveCollection = (colId: string | null) => {
     setActiveCollection(colId);
@@ -334,13 +365,31 @@ export default function Home() {
       .order('created_at', { ascending: false });
 
     if (collectionsData) {
-      setCollections(collectionsData.map(c => ({
+      const parsedCollections: Collection[] = collectionsData.map(c => ({
         id: c.id,
         name: c.name,
         isPrivate: c.is_private,
         pin: c.pin,
         createdAt: new Date(c.created_at)
-      })));
+      }));
+
+      // Check saved custom order
+      const savedColOrder = localStorage.getItem('sharey_collection_order');
+      if (savedColOrder) {
+        try {
+          const orderIds: string[] = JSON.parse(savedColOrder);
+          parsedCollections.sort((a, b) => {
+            const indexA = orderIds.indexOf(a.id);
+            const indexB = orderIds.indexOf(b.id);
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return b.createdAt.getTime() - a.createdAt.getTime();
+          });
+        } catch (e) {}
+      }
+
+      setCollections(parsedCollections);
     }
 
     const { data, error } = await supabase
@@ -430,6 +479,32 @@ export default function Home() {
 
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     e.dataTransfer.setData('itemId', itemId);
+  };
+
+  const handleCollectionDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedCollectionIndex(index);
+    e.dataTransfer.setData('collectionIndex', index.toString());
+  };
+
+  const handleCollectionReorderDrop = (targetIndex: number) => {
+    if (draggedCollectionIndex === null || draggedCollectionIndex === targetIndex) {
+      setDraggedCollectionIndex(null);
+      setDragOverCollectionReorderIndex(null);
+      return;
+    }
+
+    const reordered = [...collections];
+    const [movedCol] = reordered.splice(draggedCollectionIndex, 1);
+    reordered.splice(targetIndex, 0, movedCol);
+
+    setCollections(reordered);
+    setDraggedCollectionIndex(null);
+    setDragOverCollectionReorderIndex(null);
+
+    // Save order to localStorage
+    const orderIds = reordered.map(c => c.id);
+    localStorage.setItem('sharey_collection_order', JSON.stringify(orderIds));
+    showNotification('Collections order updated');
   };
 
   const handleDragOver = (e: React.DragEvent, collectionId: string | null) => {
@@ -802,24 +877,45 @@ export default function Home() {
     showNotification('Copied');
   };
 
-  const filteredItems = items.filter(item => {
-    const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
-    const matchesSearch = item.content.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (item.fileName && item.fileName.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    let matchesCollection = true;
-    if (activeCollection) {
-      matchesCollection = item.collectionId === activeCollection;
-    } else {
-      // In "All Items", hide items that belong to a private collection
-      const parentCol = collections.find(c => c.id === item.collectionId);
-      if (parentCol?.isPrivate) {
-        matchesCollection = false;
+  const filteredItems = items
+    .filter(item => {
+      const matchesFilter = activeFilter === 'all' || item.type === activeFilter;
+      
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || 
+        (item.title && item.title.toLowerCase().includes(q)) ||
+        item.content.toLowerCase().includes(q) || 
+        (item.fileName && item.fileName.toLowerCase().includes(q)) ||
+        (item.fileItems && item.fileItems.some(fi => fi.name.toLowerCase().includes(q)));
+      
+      let matchesCollection = true;
+      if (searchQuery.trim() && searchScope === 'global') {
+        // Global search searches across all collections except private locked collections
+        const parentCol = collections.find(c => c.id === item.collectionId);
+        if (parentCol?.isPrivate) {
+          matchesCollection = false;
+        } else {
+          matchesCollection = true;
+        }
+      } else if (activeCollection) {
+        matchesCollection = item.collectionId === activeCollection;
+      } else {
+        // In "All Items", hide items that belong to a private collection
+        const parentCol = collections.find(c => c.id === item.collectionId);
+        if (parentCol?.isPrivate) {
+          matchesCollection = false;
+        }
       }
-    }
-    
-    return matchesFilter && matchesSearch && matchesCollection;
-  });
+      
+      return matchesFilter && matchesSearch && matchesCollection;
+    })
+    .sort((a, b) => {
+      const aPinned = pinnedItemIds.includes(a.id);
+      const bPinned = pinnedItemIds.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
 
   const getIconForType = (type: ItemType) => {
     switch(type) {
@@ -1080,25 +1176,26 @@ export default function Home() {
               </div>
             )}
 
-            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center transition-colors gap-2 rounded-b-2xl">
-              <div className="flex items-center gap-1 min-w-0">
+            <div className="bg-gray-50 dark:bg-gray-900 px-3.5 py-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap justify-between items-center transition-colors gap-2 rounded-b-2xl">
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                 {collections.length > 0 && (
                   <div className="relative">
                     <button 
                       onClick={() => setIsUploadDropdownOpen(!isUploadDropdownOpen)}
                       disabled={uploading}
-                      className="flex items-center gap-1.5 bg-transparent text-sm font-medium text-gray-600 dark:text-gray-400 outline-none border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 focus:border-indigo-400 dark:focus:border-indigo-500 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 bg-white dark:bg-gray-800 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 outline-none border border-gray-200 dark:border-gray-700 rounded-xl px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-750 focus:border-indigo-400 dark:focus:border-indigo-500 transition-colors disabled:opacity-50 shadow-2xs"
                     >
-                      <span className="truncate max-w-[100px] lg:max-w-[120px]">
-                        {selectedCollectionForUpload ? collections.find(c => c.id === selectedCollectionForUpload)?.name : 'No Collection'}
+                      <Folder className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span className="truncate max-w-[90px] sm:max-w-[120px]">
+                        {selectedCollectionForUpload ? collections.find(c => c.id === selectedCollectionForUpload)?.name : 'My Collections'}
                       </span>
-                      <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-60" />
                     </button>
                     
                     {isUploadDropdownOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setIsUploadDropdownOpen(false)}></div>
-                        <div className="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg shadow-black/5 z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+                        <div className="absolute left-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
                           <button
                             onClick={() => {
                               setSelectedCollectionForUpload(null);
@@ -1106,7 +1203,7 @@ export default function Home() {
                             }}
                             className={`w-full text-left px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!selectedCollectionForUpload ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20' : 'text-gray-700 dark:text-gray-300'}`}
                           >
-                            No Collection
+                            No Collection (All Items)
                           </button>
                           {collections.map(c => (
                             <button
@@ -1129,33 +1226,35 @@ export default function Home() {
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="flex shrink-0 items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 px-2 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors font-medium text-sm disabled:opacity-50"
+                  className="flex shrink-0 items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 px-2 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors font-medium text-xs sm:text-sm disabled:opacity-50"
+                  title="Attach Files"
                 >
                   <Paperclip className="w-4 h-4" />
-                  <span className="hidden xl:inline">Attach</span>
+                  <span className="hidden sm:inline">Attach</span>
                 </button>
                 {(attachedFiles.length > 0 || inputValue.trim().length > 0) && (
                   <button 
-                    onClick={() => { setAttachedFiles([]); setInputValue(''); }}
+                    onClick={() => { setAttachedFiles([]); setInputValue(''); setInputTitle(''); }}
                     disabled={uploading}
-                    className="flex shrink-0 items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium text-sm disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium text-xs sm:text-sm disabled:opacity-50"
+                    title="Clear All"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="hidden xl:inline">Clear</span>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Clear</span>
                   </button>
                 )}
               </div>
               <button 
                 onClick={onShareButtonClick}
                 disabled={(!inputValue.trim() && attachedFiles.length === 0) || uploading}
-                className="flex shrink-0 items-center gap-2 bg-gray-900 dark:bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all shadow-sm active:scale-95"
+                className="flex shrink-0 items-center gap-1.5 bg-gray-900 dark:bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-gray-800 dark:hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-xs sm:text-sm transition-all shadow-sm active:scale-95 ml-auto"
               >
                 {uploading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-                <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'SHARE'}</span>
+                <span>{uploading ? '...' : 'SHARE'}</span>
               </button>
             </div>
           </div>
@@ -1163,24 +1262,58 @@ export default function Home() {
 
         {/* Right Column: Filters & Search (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-24 order-2 lg:order-3">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <input 
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
-                className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl py-2.5 pl-9 pr-4 outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/50 transition-all text-sm dark:text-gray-100 shadow-sm"
+                placeholder={activeCollection ? `Search ${searchScope === 'current' ? 'in this collection' : 'everywhere'}...` : "Search all saved items..."}
+                className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl py-2.5 pl-9 pr-8 outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/50 transition-all text-sm dark:text-gray-100 shadow-sm"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* Scope Selector: Show when activeCollection is selected */}
+            {activeCollection && (
+              <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-850 rounded-xl text-xs font-semibold">
+                <button
+                  onClick={() => setSearchScope('current')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg transition-all text-center ${
+                    searchScope === 'current'
+                      ? 'bg-white dark:bg-gray-750 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  This Collection
+                </button>
+                <button
+                  onClick={() => setSearchScope('global')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg transition-all text-center ${
+                    searchScope === 'global'
+                      ? 'bg-white dark:bg-gray-750 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  Search Everywhere
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 pt-1">
               {['all', 'text', 'link', 'image', 'video', 'file'].map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setActiveFilter(filter as any)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors border shadow-sm ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-colors border shadow-sm ${
                     activeFilter === filter 
                       ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100' 
                       : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -1231,17 +1364,41 @@ export default function Home() {
                 </div>
               </button>
               
-              {collections.map(col => (
+              {collections.map((col, index) => (
                 <div 
                   key={col.id} 
-                  onDragOver={(e) => handleDragOver(e, col.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDropToCollection(e, col.id)}
-                  className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                  draggable
+                  onDragStart={(e) => handleCollectionDragStart(e, index)}
+                  onDragOver={(e) => {
+                    handleDragOver(e, col.id);
+                    e.preventDefault();
+                    if (draggedCollectionIndex !== null && dragOverCollectionReorderIndex !== index) {
+                      setDragOverCollectionReorderIndex(index);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    handleDragLeave(e);
+                    if (dragOverCollectionReorderIndex === index) {
+                      setDragOverCollectionReorderIndex(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    const collectionIndexData = e.dataTransfer.getData('collectionIndex');
+                    if (collectionIndexData !== '') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleCollectionReorderDrop(index);
+                    } else {
+                      handleDropToCollection(e, col.id);
+                    }
+                  }}
+                  className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                     activeCollection === col.id
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''}`}
+                  } ${dragOverCollectionId === col.id ? 'ring-2 ring-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 border-transparent' : ''} ${
+                    dragOverCollectionReorderIndex === index ? 'border-t-2 border-indigo-500 scale-[1.01]' : ''
+                  }`}
                   onClick={() => {
                     if (activeCollection === col.id) return;
                     if (col.isPrivate && col.pin) {
@@ -1252,7 +1409,13 @@ export default function Home() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-2.5 pr-2 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 pr-2 min-w-0 flex-1">
+                    <div 
+                      className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 p-0.5"
+                      title="Drag to reorder collection"
+                    >
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
                     {col.isPrivate ? (
                       <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                     ) : (
@@ -1276,6 +1439,7 @@ export default function Home() {
                         }
                       }}
                       className="p-1 text-gray-400 hover:text-indigo-600"
+                      title="Edit Collection"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -1302,6 +1466,7 @@ export default function Home() {
                         }
                       }}
                       className="p-1 text-gray-400 hover:text-red-600"
+                      title="Delete Collection"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -1378,16 +1543,36 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap shrink-0 pt-1">
-                    {format(item.createdAt, 'MMM d · h:mm a')}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => togglePinItem(item.id)}
+                      className={`p-1.5 rounded-lg transition-all ${
+                        pinnedItemIds.includes(item.id)
+                          ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 hover:bg-amber-200 shadow-2xs'
+                          : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                      title={pinnedItemIds.includes(item.id) ? 'Unpin card' : 'Pin card to top'}
+                    >
+                      <Pin className={`w-3.5 h-3.5 ${pinnedItemIds.includes(item.id) ? 'fill-amber-500 rotate-45' : ''}`} />
+                    </button>
+                    <div className="text-xs text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap shrink-0">
+                      {format(item.createdAt, 'MMM d · h:mm a')}
+                    </div>
                   </div>
                 </div>
 
                 {/* Card Content */}
                 <div className="pl-8 mb-4 min-w-0">
-                  {item.title && (
-                    <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base mb-2 break-words">{item.title}</h4>
-                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    {pinnedItemIds.includes(item.id) && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 px-2 py-0.5 rounded-md">
+                        <Pin className="w-3 h-3 fill-amber-500 rotate-45" /> Pinned
+                      </span>
+                    )}
+                    {item.title && (
+                      <h4 className="font-bold text-gray-900 dark:text-gray-100 text-base break-words flex-1">{item.title}</h4>
+                    )}
+                  </div>
 
                   {/* Text or Link */}
                   {textContent && (

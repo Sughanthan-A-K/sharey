@@ -126,6 +126,39 @@ export default function PublicSingleItemPage() {
   const fetchItem = async () => {
     try {
       setLoading(true);
+
+      // Fetch via public API endpoint first
+      const res = await fetch(`/api/item/${id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.item) {
+          const data = json.item;
+          const files = parseFileAttachments(data.content, data.file_url, data.file_name, data.type as ItemType);
+
+          setItem({
+            id: data.id,
+            type: data.type as ItemType,
+            title: data.title,
+            content: data.content,
+            fileName: data.file_name,
+            fileSize: data.file_size,
+            fileUrl: data.file_url,
+            fileItems: files,
+            collectionId: data.collection_id,
+            createdAt: new Date(data.created_at)
+          });
+
+          if (json.collection) {
+            setCollection(json.collection);
+            if (json.collection.is_private && json.collection.pin) {
+              setIsUnlocked(false);
+            }
+          }
+          return;
+        }
+      }
+
+      // Fallback to direct supabase query
       const { data, error } = await supabase
         .from('shared_items')
         .select('*')

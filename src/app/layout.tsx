@@ -18,9 +18,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json?v=2" />
-        <link rel="apple-touch-icon" href="/icon-512x512.png" />
-        <meta name="theme-color" content="#ffffff" />
+        <link rel="manifest" href="/manifest.json?v=3" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192x192.png" />
+        <link rel="apple-touch-icon" sizes="512x512" href="/icon-512x512.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Sharey" />
+        <meta name="theme-color" content="#4f46e5" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

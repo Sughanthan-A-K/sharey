@@ -6,6 +6,7 @@ export interface Collection {
   isPrivate?: boolean;
   pin?: string;
   createdAt: Date;
+  sortOrder?: number;
 }
 
 export interface ItemFileAttachment {
@@ -27,4 +28,5 @@ export interface SharedItem {
   fileItems?: ItemFileAttachment[];
   collectionId?: string | null;
   createdAt: Date;
+  isPinned?: boolean;
 }
