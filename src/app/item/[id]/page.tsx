@@ -346,12 +346,6 @@ export default function PublicSingleItemPage() {
             <img src="/logo.png" alt="Sharey" className="w-9 h-9" />
             <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-gray-100">Sharey</span>
           </div>
-          <button 
-            onClick={() => handleCopy(window.location.href)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-sm"
-          >
-            <Share2 className="w-4 h-4 text-indigo-500" /> Share
-          </button>
         </div>
 
         {/* Main Card */}
