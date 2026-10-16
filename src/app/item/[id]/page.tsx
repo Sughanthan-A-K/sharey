@@ -436,6 +436,17 @@ export default function PublicSingleItemPage() {
                               </div>
                             </div>
                           )}
+
+                          {/* Direct download button on thumbnail hover */}
+                          <a 
+                            href={`${f.url}?download=${encodeURIComponent(f.name)}`} 
+                            download={f.name}
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute top-2.5 right-2.5 z-10 p-2 rounded-xl bg-black/60 hover:bg-black/85 text-white backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                            title="Download file"
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
                         </div>
                       );
                     })}
@@ -473,22 +484,16 @@ export default function PublicSingleItemPage() {
           )}
 
           {/* Action Row */}
-          <div className="flex flex-wrap items-center gap-2 pt-6 mt-4 border-t border-gray-100 dark:border-gray-800">
-            {textContent && (
+          {textContent && (
+            <div className="flex flex-wrap items-center gap-2 pt-6 mt-4 border-t border-gray-100 dark:border-gray-800">
               <button 
                 onClick={() => handleCopy(textContent)} 
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors"
               >
                 <Copy className="w-4 h-4" /> Copy Text
               </button>
-            )}
-            <button 
-              onClick={() => handleCopy(window.location.href)} 
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/50 rounded-xl text-sm font-medium text-indigo-700 dark:text-indigo-300 transition-colors"
-            >
-              <Share2 className="w-4 h-4" /> Share Link
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
