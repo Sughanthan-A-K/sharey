@@ -119,6 +119,7 @@ export default function Home() {
   
   // Drag & Drop onto composer
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
+  const composerDragCounterRef = useRef<number>(0);
 
   // Collection Confirmation Modal
   const [showCollectionConfirmModal, setShowCollectionConfirmModal] = useState(false);
@@ -951,23 +952,52 @@ export default function Home() {
         {/* Left Column: Composer (Sticky on Desktop) */}
         <div className="lg:col-span-3 lg:sticky lg:top-28 order-1">
           <div 
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              composerDragCounterRef.current += 1;
+              if (e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                setIsDragOverComposer(true);
+              }
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsDragOverComposer(true);
+              e.dataTransfer.dropEffect = 'copy';
+              if (!isDragOverComposer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                setIsDragOverComposer(true);
+              }
             }}
             onDragLeave={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setIsDragOverComposer(false);
+              composerDragCounterRef.current = Math.max(0, composerDragCounterRef.current - 1);
+              if (composerDragCounterRef.current === 0) {
+                setIsDragOverComposer(false);
+              }
             }}
             onDrop={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              composerDragCounterRef.current = 0;
               setIsDragOverComposer(false);
+              
+              // Handle dropped files from desktop / explorer / browser
               if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 const droppedFiles = Array.from(e.dataTransfer.files);
                 addFilesToPending(droppedFiles);
+              } else if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+                const itemsList: File[] = [];
+                for (let i = 0; i < e.dataTransfer.items.length; i++) {
+                  const item = e.dataTransfer.items[i];
+                  if (item.kind === 'file') {
+                    const f = item.getAsFile();
+                    if (f) itemsList.push(f);
+                  }
+                }
+                if (itemsList.length > 0) {
+                  addFilesToPending(itemsList);
+                }
               }
             }}
             className={`bg-white dark:bg-gray-900 rounded-2xl shadow-sm border transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20 ${
