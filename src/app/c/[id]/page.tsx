@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { 
   FileText, Video, File as FileIcon, Image as ImageIcon, Link as LinkIcon, 
@@ -31,6 +31,41 @@ export default function PublicCollectionPage() {
   const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const galleryVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Keyboard navigation for preview modal (Escape, ArrowLeft, ArrowRight, Space)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showPreviewModal) {
+          setShowPreviewModal(false);
+        }
+        return;
+      }
+
+      if (showPreviewModal && previewFiles.length > 0) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setPreviewIndex(prev => (prev - 1 + previewFiles.length) % previewFiles.length);
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          setPreviewIndex(prev => (prev + 1) % previewFiles.length);
+        } else if (e.key === ' ' || e.code === 'Space') {
+          if (galleryVideoRef.current) {
+            e.preventDefault();
+            if (galleryVideoRef.current.paused) {
+              galleryVideoRef.current.play();
+            } else {
+              galleryVideoRef.current.pause();
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPreviewModal, previewFiles]);
 
   const parseFileAttachments = (rawContent: string, fallbackUrl?: string, fallbackName?: string, fallbackType: ItemType = 'file'): ItemFileAttachment[] => {
     try {
@@ -475,7 +510,7 @@ export default function PublicCollectionPage() {
                   className="max-w-full max-h-full object-contain rounded-lg" 
                 />
               ) : previewFiles[previewIndex]?.type === 'video' ? (
-                <video src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
+                <video ref={galleryVideoRef} src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
               ) : (
                 <iframe src={previewFiles[previewIndex]?.url} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
               )}

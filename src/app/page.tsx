@@ -147,6 +147,9 @@ export default function Home() {
 
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const galleryVideoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
   const supabase = createClient();
   const { theme, setTheme } = useTheme();
@@ -299,7 +302,7 @@ export default function Home() {
   }, [activeCollection]);
 
   useEffect(() => {
-    if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget || showCollectionConfirmModal || showPreviewModal) {
+    if (editTarget || deleteTarget || showLogoutConfirm || showCollectionModal || deleteCollectionTarget || showCollectionConfirmModal || showPreviewModal || pinPromptConfig) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -307,7 +310,161 @@ export default function Home() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [editTarget, deleteTarget, showLogoutConfirm, showCollectionModal, deleteCollectionTarget, showCollectionConfirmModal, showPreviewModal]);
+  }, [editTarget, deleteTarget, showLogoutConfirm, showCollectionModal, deleteCollectionTarget, showCollectionConfirmModal, showPreviewModal, pinPromptConfig]);
+
+  // Global Keyboard Shortcuts (Escape to close modals, Arrow keys for gallery, Space for video play/pause, Ctrl+K or / or Ctrl+I to focus input, Ctrl+Shift+A to attach)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. ESC Key: Close top-most modal
+      if (e.key === 'Escape') {
+        if (showPreviewModal) {
+          setShowPreviewModal(false);
+          return;
+        }
+        if (showCollectionConfirmModal) {
+          setShowCollectionConfirmModal(false);
+          setPendingSharePayload(null);
+          return;
+        }
+        if (pinPromptConfig) {
+          setPinPromptConfig(null);
+          return;
+        }
+        if (showCollectionModal) {
+          setShowCollectionModal(false);
+          return;
+        }
+        if (deleteCollectionTarget) {
+          setDeleteCollectionTarget(null);
+          return;
+        }
+        if (deleteTarget) {
+          setDeleteTarget(null);
+          return;
+        }
+        if (editTarget) {
+          setEditTarget(null);
+          setEditValue('');
+          setEditTitle('');
+          setEditAttachedFiles([]);
+          setEditExistingFiles([]);
+          setEditFileRemoved(false);
+          return;
+        }
+        if (showLogoutConfirm) {
+          setShowLogoutConfirm(false);
+          return;
+        }
+        if (isUploadDropdownOpen) {
+          setIsUploadDropdownOpen(false);
+          return;
+        }
+        return;
+      }
+
+      // 2. Gallery modal shortcuts (< ArrowLeft, > ArrowRight, Space for video toggle)
+      if (showPreviewModal && previewFiles.length > 0) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setPreviewIndex(prev => (prev - 1 + previewFiles.length) % previewFiles.length);
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          setPreviewIndex(prev => (prev + 1) % previewFiles.length);
+          return;
+        }
+        if (e.key === ' ' || e.code === 'Space') {
+          if (galleryVideoRef.current) {
+            e.preventDefault();
+            if (galleryVideoRef.current.paused) {
+              galleryVideoRef.current.play();
+            } else {
+              galleryVideoRef.current.pause();
+            }
+          }
+          return;
+        }
+      }
+
+      // 3. Quick shortcuts when not in modals
+      const isAnyModalOpen = Boolean(
+        showPreviewModal ||
+        showCollectionConfirmModal ||
+        pinPromptConfig ||
+        showCollectionModal ||
+        deleteCollectionTarget ||
+        deleteTarget ||
+        editTarget ||
+        showLogoutConfirm
+      );
+
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      const isEditingText = activeTag === 'input' || activeTag === 'textarea';
+
+      // Attach file shortcut: Ctrl+Shift+A or Ctrl+O (when not editing another input)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        fileInputRef.current?.click();
+        return;
+      }
+
+      // Focus composer shortcut: '/' or 'Ctrl+I' or 'Ctrl+K' (when not already in an input/textarea)
+      if (!isAnyModalOpen) {
+        if (!isEditingText && (e.key === '/' || ((e.key === 'i' || e.key === 'k') && (e.ctrlKey || e.metaKey)))) {
+          e.preventDefault();
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+          }
+        }
+      }
+    };
+
+    // Global paste handler to attach images copied from clipboard (e.g. Snipping tool / copy image)
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      // Don't intercept if editing modals or other inputs unless they are the main composer
+      if (editTarget || showCollectionModal || pinPromptConfig || showPreviewModal) return;
+
+      const activeElement = document.activeElement;
+      const isInput = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
+      
+      if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+        const fileList = Array.from(e.clipboardData.files);
+        const hasMedia = fileList.some(f => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.includes('pdf'));
+        
+        // If files were pasted (like copied screenshot or files), add to composer files
+        if (hasMedia || fileList.length > 0) {
+          // If user was pasting into an input/textarea, only intercept if it's purely file(s)
+          // (avoid blocking normal text copy-paste)
+          const textData = e.clipboardData.getData('text/plain');
+          if (!textData || fileList.some(f => f.type.startsWith('image/'))) {
+            e.preventDefault();
+            addFilesToPending(fileList);
+            showNotification(`Attached ${fileList.length} pasted file(s)`);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [
+    showPreviewModal,
+    previewFiles,
+    showCollectionConfirmModal,
+    pinPromptConfig,
+    showCollectionModal,
+    deleteCollectionTarget,
+    deleteTarget,
+    editTarget,
+    showLogoutConfirm,
+    isUploadDropdownOpen
+  ]);
 
   const parseFileAttachments = (rawContent: string, fallbackUrl?: string, fallbackName?: string, fallbackType: ItemType = 'file'): ItemFileAttachment[] => {
     try {
@@ -1102,6 +1259,15 @@ export default function Home() {
                 }
               }
             }}
+            onPaste={(e) => {
+              if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+                const pastedFiles = Array.from(e.clipboardData.files);
+                if (pastedFiles.length > 0) {
+                  e.preventDefault();
+                  addFilesToPending(pastedFiles);
+                }
+              }
+            }}
             className={`bg-white dark:bg-gray-900 rounded-2xl shadow-sm border transition-all focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-500 relative z-20 ${
               isDragOverComposer 
                 ? 'border-indigo-500 ring-2 ring-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20' 
@@ -1117,9 +1283,16 @@ export default function Home() {
 
             <div className="relative w-full">
               <input
+                ref={titleInputRef}
                 type="text"
                 value={inputTitle}
                 onChange={(e) => setInputTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    onShareButtonClick();
+                  }
+                }}
                 disabled={uploading}
                 placeholder="Title (optional)"
                 className="w-full px-4 pt-4 pb-2 text-gray-900 dark:text-gray-100 font-semibold bg-transparent outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-lg sm:text-xl disabled:opacity-50 pr-10"
@@ -1135,10 +1308,17 @@ export default function Home() {
               )}
             </div>
             <textarea 
+              ref={textareaRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  onShareButtonClick();
+                }
+              }}
               disabled={uploading}
-              placeholder="Paste a link, type something, or share anything..."
+              placeholder="Paste a link, type something, or share anything... (Ctrl+Enter to share)"
               className="w-full px-4 pb-4 pt-2 min-h-[80px] lg:min-h-[100px] resize-none outline-none text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 text-base sm:text-lg bg-transparent disabled:opacity-50"
             />
             
@@ -2551,7 +2731,7 @@ export default function Home() {
                   className="max-w-full max-h-full object-contain rounded-lg" 
                 />
               ) : previewFiles[previewIndex]?.type === 'video' ? (
-                <video src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
+                <video ref={galleryVideoRef} src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
               ) : (
                 <iframe src={previewFiles[previewIndex]?.url} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
               )}
