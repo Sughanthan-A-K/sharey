@@ -573,7 +573,19 @@ export default function Home() {
   };
 
   const handleSaveCollection = async () => {
-    if (!collectionInputValue.trim()) return;
+    const trimmedName = collectionInputValue.trim();
+    if (!trimmedName) return;
+
+    // Check if collection with the same name already exists (case-insensitive)
+    const isDuplicate = collections.some(c => 
+      c.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+      (!editCollectionTarget || c.id !== editCollectionTarget.id)
+    );
+
+    if (isDuplicate) {
+      showNotification('A collection with this name already exists', 'error');
+      return;
+    }
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -582,14 +594,14 @@ export default function Home() {
       const { error } = await supabase
         .from('collections')
         .update({ 
-          name: collectionInputValue.trim(),
+          name: trimmedName,
           is_private: isCollectionPrivate,
           pin: collectionPin.trim() || null
         })
         .eq('id', editCollectionTarget.id);
       
       if (error) {
-        showNotification(error.message);
+        showNotification(error.message, 'error');
       } else {
         showNotification('Collection updated');
         setShowCollectionModal(false);
@@ -600,13 +612,13 @@ export default function Home() {
         .from('collections')
         .insert({ 
           user_id: user.id, 
-          name: collectionInputValue.trim(),
+          name: trimmedName,
           is_private: isCollectionPrivate,
           pin: collectionPin.trim() || null
         });
       
       if (error) {
-        showNotification(error.message);
+        showNotification(error.message, 'error');
       } else {
         showNotification('Collection created');
         setShowCollectionModal(false);
