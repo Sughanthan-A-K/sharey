@@ -9,7 +9,7 @@ import {
   FileText, Video, File as FileIcon, Copy, Trash2, X, Download, 
   CheckCircle2, ExternalLink, LogOut, AlertTriangle, Moon, Sun, Loader2, Edit2,
   Folder, Plus, MoreVertical, MoreHorizontal, Lock, Eye, EyeOff, XCircle, ChevronDown, GripVertical,
-  ChevronLeft, ChevronRight, Share2, UploadCloud, Pin
+  ChevronLeft, ChevronRight, Share2, UploadCloud, Pin, ArrowDownAZ, ArrowUpAZ
 } from 'lucide-react';
 import { SharedItem, ItemType, Collection, ItemFileAttachment } from '@/types';
 import { createClient } from '@/utils/supabase/client';
@@ -494,6 +494,56 @@ export default function Home() {
     return [];
   };
 
+  const handleSortItemFiles = async (itemId: string, direction: 'asc' | 'desc') => {
+    const targetItem = items.find(i => i.id === itemId);
+    if (!targetItem || !targetItem.fileItems || targetItem.fileItems.length < 2) return;
+
+    const sortedFiles = [...targetItem.fileItems].sort((a, b) => {
+      const cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      return direction === 'asc' ? cmp : -cmp;
+    });
+
+    const previousItems = [...items];
+    const textContent = getDisplayContent(targetItem);
+    const multiPayload = {
+      __sharey_multi__: true,
+      text: textContent,
+      files: sortedFiles
+    };
+
+    // Optimistic UI update
+    setItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          fileItems: sortedFiles,
+          content: JSON.stringify(multiPayload),
+          fileName: sortedFiles[0].name,
+          fileUrl: sortedFiles[0].url,
+          fileSize: sortedFiles[0].size
+        };
+      }
+      return item;
+    }));
+
+    showNotification(direction === 'asc' ? 'Sorted files A to Z' : 'Sorted files Z to A');
+
+    const { error } = await supabase
+      .from('shared_items')
+      .update({
+        content: JSON.stringify(multiPayload),
+        file_name: sortedFiles[0].name,
+        file_url: sortedFiles[0].url,
+        file_size: sortedFiles[0].size
+      })
+      .eq('id', itemId);
+
+    if (error) {
+      setItems(previousItems);
+      showNotification('Failed to save file sort: ' + error.message, 'error');
+    }
+  };
+
   const getDisplayContent = (item: SharedItem): string => {
     if (item.content && item.content.startsWith('{') && item.content.endsWith('}')) {
       try {
@@ -767,7 +817,6 @@ export default function Home() {
 
   const addFilesToEditPending = (newFilesArray: File[]) => {
     let dbDuplicateCount = 0;
-    let limitHit = false;
     let sizeLimitHit = false;
 
     const validFiles: File[] = [];
@@ -791,11 +840,7 @@ export default function Home() {
         const inPending = combined.some(f => f.name === file.name && f.size === file.size);
         const inExisting = editExistingFiles.some(f => f.name === file.name);
         if (!inPending && !inExisting) {
-          if (combined.length + editExistingFiles.length < 10) {
-            combined.push(file);
-          } else {
-            limitHit = true;
-          }
+          combined.push(file);
         }
       });
       return combined;
@@ -806,15 +851,12 @@ export default function Home() {
         showNotification("Files over 50MB are not allowed");
       } else if (dbDuplicateCount > 0) {
         showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
-      } else if (limitHit) {
-        showNotification("Maximum 10 files allowed");
       }
     }, 0);
   };
 
   const addFilesToPending = (newFilesArray: File[]) => {
     let dbDuplicateCount = 0;
-    let limitHit = false;
     let sizeLimitHit = false;
     
     const validFiles: File[] = [];
@@ -839,11 +881,7 @@ export default function Home() {
       validFiles.forEach(file => {
         const inPending = combined.some(f => f.name === file.name && f.size === file.size);
         if (!inPending) {
-          if (combined.length < 10) {
-            combined.push(file);
-          } else {
-            limitHit = true;
-          }
+          combined.push(file);
         }
       });
       return combined;
@@ -854,8 +892,6 @@ export default function Home() {
         showNotification("Files over 50MB are not allowed");
       } else if (dbDuplicateCount > 0) {
         showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
-      } else if (limitHit) {
-        showNotification("Maximum 10 files allowed");
       }
     }, 0);
   };
@@ -1396,34 +1432,63 @@ export default function Home() {
             />
 
             {attachedFiles.length > 0 && (
-              <div className="pl-4 pr-3 pb-3 space-y-2 max-h-[50vh] overflow-y-auto custom-scrollbar">
-                {attachedFiles.map((file, idx) => {
-                  const isImg = file.type.startsWith('image/');
-                  const tempUrl = isImg ? URL.createObjectURL(file) : null;
-                  return (
-                    <div key={idx} className="flex items-center gap-2.5 p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl w-full">
-                      {isImg && tempUrl ? (
-                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={tempUrl} alt={file.name} className="w-full h-full object-cover" />
+              <div className="pl-4 pr-3 pb-3">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <span>{attachedFiles.length} file(s) attached</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachedFiles(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        showNotification('Sorted files A to Z');
+                      }}
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Sort A to Z"
+                    >
+                      <ArrowDownAZ className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAttachedFiles(prev => [...prev].sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        showNotification('Sorted files Z to A');
+                      }}
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Sort Z to A"
+                    >
+                      <ArrowUpAZ className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                  {attachedFiles.map((file, idx) => {
+                    const isImg = file.type.startsWith('image/');
+                    const tempUrl = isImg ? URL.createObjectURL(file) : null;
+                    return (
+                      <div key={idx} className="flex items-center gap-2.5 p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl w-full">
+                        {isImg && tempUrl ? (
+                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={tempUrl} alt={file.name} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 rounded-md shadow-sm shrink-0 flex items-center justify-center">
+                            {getIconForType(getFileType(file))}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400">{formatFileSize(file.size)}</p>
                         </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 rounded-md shadow-sm shrink-0 flex items-center justify-center">
-                          {getIconForType(getFileType(file))}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{formatFileSize(file.size)}</p>
+                        {!uploading && (
+                          <button onClick={() => removeAttachedFile(idx)} className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                      {!uploading && (
-                        <button onClick={() => removeAttachedFile(idx)} className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors">
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1943,6 +2008,38 @@ export default function Home() {
                   {/* Attached Files & Gallery */}
                   {cardFiles.length > 0 && (
                     <div className="space-y-3 pt-1">
+                      {cardFiles.length > 1 && (
+                        <div className="flex items-center justify-between pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          <span>{cardFiles.length} files attached</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSortItemFiles(item.id, 'asc');
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-indigo-600 dark:hover:text-indigo-400"
+                              title="Sort files A to Z"
+                            >
+                              <ArrowDownAZ className="w-3.5 h-3.5" />
+                              <span className="text-[11px]">A-Z</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSortItemFiles(item.id, 'desc');
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hover:text-indigo-600 dark:hover:text-indigo-400"
+                              title="Sort files Z to A"
+                            >
+                              <ArrowUpAZ className="w-3.5 h-3.5" />
+                              <span className="text-[11px]">Z-A</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Unified Visual Media Grid (Images and Videos Side-by-Side) */}
                       {(() => {
                         const visualFiles = cardFiles.filter(f => f.type === 'image' || f.type === 'video');
@@ -2279,6 +2376,39 @@ export default function Home() {
                 className="w-full bg-transparent resize-none outline-none min-h-[300px] text-gray-800 dark:text-gray-200 text-lg placeholder-gray-400 dark:placeholder-gray-500 mb-4 disabled:opacity-50"
                 disabled={isSavingEdit}
               />
+
+              {/* Existing & New Files Preview Controls (Sorting) */}
+              {(editExistingFiles.length > 0 || editAttachedFiles.length > 0) && (
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <span>{editExistingFiles.length + editAttachedFiles.length} file(s) attached</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditExistingFiles(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        setEditAttachedFiles(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        showNotification('Sorted files A to Z');
+                      }}
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Sort files A to Z"
+                    >
+                      <ArrowDownAZ className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditExistingFiles(prev => [...prev].sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        setEditAttachedFiles(prev => [...prev].sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })));
+                        showNotification('Sorted files Z to A');
+                      }}
+                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Sort files Z to A"
+                    >
+                      <ArrowUpAZ className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Existing Files Preview (Supports multi-file) */}
               {editExistingFiles.length > 0 && (
