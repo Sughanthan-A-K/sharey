@@ -1343,7 +1343,7 @@ export default function Home() {
             />
 
             {attachedFiles.length > 0 && (
-              <div className="pl-4 pr-3 pb-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+              <div className="pl-4 pr-3 pb-3 space-y-2 max-h-[50vh] overflow-y-auto custom-scrollbar">
                 {attachedFiles.map((file, idx) => {
                   const isImg = file.type.startsWith('image/');
                   const tempUrl = isImg ? URL.createObjectURL(file) : null;
