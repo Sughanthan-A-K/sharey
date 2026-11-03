@@ -132,6 +132,10 @@ export default function Home() {
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
   const composerDragCounterRef = useRef<number>(0);
 
+  // Drag & Drop onto Edit modal
+  const [isDragOverEditModal, setIsDragOverEditModal] = useState(false);
+  const editModalDragCounterRef = useRef<number>(0);
+
   // Collection Confirmation Modal
   const [showCollectionConfirmModal, setShowCollectionConfirmModal] = useState(false);
   const [pendingSharePayload, setPendingSharePayload] = useState<{
@@ -423,25 +427,27 @@ export default function Home() {
 
     // Global paste handler to attach images copied from clipboard (e.g. Snipping tool / copy image)
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      // Don't intercept if editing modals or other inputs unless they are the main composer
-      if (editTarget || showCollectionModal || pinPromptConfig || showPreviewModal) return;
+      // Don't intercept if other modals are active (except editTarget)
+      if (showCollectionModal || pinPromptConfig || showPreviewModal) return;
 
       const activeElement = document.activeElement;
-      const isInput = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
       
       if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
         const fileList = Array.from(e.clipboardData.files);
         const hasMedia = fileList.some(f => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.includes('pdf'));
         
-        // If files were pasted (like copied screenshot or files), add to composer files
+        // If files were pasted (like copied screenshot or files)
         if (hasMedia || fileList.length > 0) {
-          // If user was pasting into an input/textarea, only intercept if it's purely file(s)
-          // (avoid blocking normal text copy-paste)
           const textData = e.clipboardData.getData('text/plain');
           if (!textData || fileList.some(f => f.type.startsWith('image/'))) {
             e.preventDefault();
-            addFilesToPending(fileList);
-            showNotification(`Attached ${fileList.length} pasted file(s)`);
+            if (editTarget) {
+              addFilesToEditPending(fileList);
+              showNotification(`Attached ${fileList.length} file(s) to edit`);
+            } else {
+              addFilesToPending(fileList);
+              showNotification(`Attached ${fileList.length} pasted file(s)`);
+            }
           }
         }
       }
@@ -757,6 +763,53 @@ export default function Home() {
     setToastType(type);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
+  };
+
+  const addFilesToEditPending = (newFilesArray: File[]) => {
+    let dbDuplicateCount = 0;
+    let limitHit = false;
+    let sizeLimitHit = false;
+
+    const validFiles: File[] = [];
+    newFilesArray.forEach(file => {
+      if (file.size > 50 * 1024 * 1024) {
+        sizeLimitHit = true;
+        return;
+      }
+      const formattedSize = formatFileSize(file.size);
+      const inDB = items.some(item => (item.fileName === file.name && item.fileSize === formattedSize) || (item.fileItems && item.fileItems.some(fi => fi.name === file.name)));
+      if (inDB) {
+        dbDuplicateCount++;
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    setEditAttachedFiles(prev => {
+      const combined = [...prev];
+      validFiles.forEach(file => {
+        const inPending = combined.some(f => f.name === file.name && f.size === file.size);
+        const inExisting = editExistingFiles.some(f => f.name === file.name);
+        if (!inPending && !inExisting) {
+          if (combined.length + editExistingFiles.length < 10) {
+            combined.push(file);
+          } else {
+            limitHit = true;
+          }
+        }
+      });
+      return combined;
+    });
+
+    setTimeout(() => {
+      if (sizeLimitHit) {
+        showNotification("Files over 50MB are not allowed");
+      } else if (dbDuplicateCount > 0) {
+        showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
+      } else if (limitHit) {
+        showNotification("Maximum 10 files allowed");
+      }
+    }, 0);
   };
 
   const addFilesToPending = (newFilesArray: File[]) => {
@@ -2117,7 +2170,66 @@ export default function Home() {
       {/* Edit Modal */}
       {editTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl p-5 shadow-2xl border border-gray-200 dark:border-gray-800 transition-colors w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95">
+          <div 
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              editModalDragCounterRef.current += 1;
+              if (e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                setIsDragOverEditModal(true);
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'copy';
+              if (!isDragOverEditModal && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                setIsDragOverEditModal(true);
+              }
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              editModalDragCounterRef.current = Math.max(0, editModalDragCounterRef.current - 1);
+              if (editModalDragCounterRef.current === 0) {
+                setIsDragOverEditModal(false);
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              editModalDragCounterRef.current = 0;
+              setIsDragOverEditModal(false);
+              
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                addFilesToEditPending(droppedFiles);
+              } else if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+                const itemsList: File[] = [];
+                for (let i = 0; i < e.dataTransfer.items.length; i++) {
+                  const item = e.dataTransfer.items[i];
+                  if (item.kind === 'file') {
+                    const f = item.getAsFile();
+                    if (f) itemsList.push(f);
+                  }
+                }
+                if (itemsList.length > 0) {
+                  addFilesToEditPending(itemsList);
+                }
+              }
+            }}
+            className={`bg-white dark:bg-gray-900 rounded-3xl p-5 shadow-2xl border transition-all w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 relative ${
+              isDragOverEditModal 
+                ? 'border-indigo-500 ring-2 ring-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/20' 
+                : 'border-gray-200 dark:border-gray-800'
+            }`}
+          >
+            {isDragOverEditModal && (
+              <div className="absolute inset-0 bg-indigo-500/10 dark:bg-indigo-500/20 backdrop-blur-[1px] rounded-3xl flex flex-col items-center justify-center pointer-events-none z-30 border-2 border-dashed border-indigo-500 animate-in fade-in">
+                <UploadCloud className="w-10 h-10 text-indigo-600 dark:text-indigo-400 animate-bounce mb-2" />
+                <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Drop files here to attach to this item</p>
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-4 shrink-0 text-indigo-600 dark:text-indigo-400 font-bold">
               <Edit2 className="w-5 h-5" />
               <span>Edit Item</span>
@@ -2232,53 +2344,8 @@ export default function Home() {
                   multiple
                   onChange={(e) => {
                     if (e.target.files) {
-                      const newFilesArray = Array.from(e.target.files);
-                      let dbDuplicateCount = 0;
-                      let limitHit = false;
-                      let sizeLimitHit = false;
-
-                      const validFiles: File[] = [];
-                      newFilesArray.forEach(file => {
-                        if (file.size > 50 * 1024 * 1024) {
-                          sizeLimitHit = true;
-                          return;
-                        }
-                        const formattedSize = formatFileSize(file.size);
-                        const inDB = items.some(item => (item.fileName === file.name && item.fileSize === formattedSize) || (item.fileItems && item.fileItems.some(fi => fi.name === file.name)));
-                        if (inDB) {
-                          dbDuplicateCount++;
-                        } else {
-                          validFiles.push(file);
-                        }
-                      });
-
-                      setEditAttachedFiles(prev => {
-                        const combined = [...prev];
-                        validFiles.forEach(file => {
-                          const inPending = combined.some(f => f.name === file.name && f.size === file.size);
-                          const inExisting = editExistingFiles.some(f => f.name === file.name);
-                          if (!inPending && !inExisting) {
-                            if (combined.length + editExistingFiles.length < 10) {
-                              combined.push(file);
-                            } else {
-                              limitHit = true;
-                            }
-                          }
-                        });
-                        return combined;
-                      });
-
+                      addFilesToEditPending(Array.from(e.target.files));
                       e.target.value = '';
-
-                      setTimeout(() => {
-                        if (sizeLimitHit) {
-                          showNotification("Files over 50MB are not allowed");
-                        } else if (dbDuplicateCount > 0) {
-                          showNotification(`Skipped ${dbDuplicateCount} file(s) already saved`);
-                        } else if (limitHit) {
-                          showNotification("Maximum 10 files allowed");
-                        }
-                      }, 0);
                     }
                   }}
                   className="hidden"
