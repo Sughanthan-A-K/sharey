@@ -1,4 +1,4 @@
-export type ItemType = 'text' | 'link' | 'image' | 'video' | 'file';
+export type ItemType = 'text' | 'link' | 'image' | 'video' | 'audio' | 'file';
 
 export interface Collection {
   id: string;

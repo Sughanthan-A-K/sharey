@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { 
   FileText, Video, File as FileIcon, Image as ImageIcon, Link as LinkIcon, 
   ExternalLink, Download, Loader2, X, AlertTriangle, Copy, CheckCircle2, ChevronLeft, ChevronRight, Share2,
-  Lock, Eye, EyeOff
+  Lock, Eye, EyeOff, Music
 } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { SharedItem, ItemType, ItemFileAttachment } from '@/types';
@@ -26,7 +26,7 @@ export default function PublicSingleItemPage() {
   const [pinError, setPinError] = useState(false);
   
   // Gallery & Preview
-  const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
+  const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType; size?: string }[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
@@ -77,11 +77,23 @@ export default function PublicSingleItemPage() {
   };
 
   const parseFileAttachments = (rawContent: string, fallbackUrl?: string, fallbackName?: string, fallbackType: ItemType = 'file'): ItemFileAttachment[] => {
+    const detectTypeFromName = (name: string, fallback: ItemType): ItemType => {
+      if (fallback === 'image' || fallback === 'video' || fallback === 'audio') return fallback;
+      const ext = name.split('.').pop()?.toLowerCase() || '';
+      if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return 'audio';
+      if (['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) return 'video';
+      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+      return fallback;
+    };
+
     try {
       if (rawContent && rawContent.startsWith('{') && rawContent.endsWith('}')) {
         const parsed = JSON.parse(rawContent);
         if (parsed && parsed.__sharey_multi__ && Array.isArray(parsed.files)) {
-          return parsed.files;
+          return parsed.files.map((f: ItemFileAttachment) => ({
+            ...f,
+            type: detectTypeFromName(f.name, f.type)
+          }));
         }
       }
     } catch (e) {
@@ -89,10 +101,11 @@ export default function PublicSingleItemPage() {
     }
 
     if (fallbackUrl) {
+      const fileName = fallbackName || 'attachment';
       return [{
-        name: fallbackName || 'attachment',
+        name: fileName,
         url: fallbackUrl,
-        type: fallbackType,
+        type: detectTypeFromName(fileName, fallbackType),
       }];
     }
     return [];
@@ -357,7 +370,7 @@ export default function PublicSingleItemPage() {
     }
   };
 
-  const openGalleryAt = (files: { url: string; name: string; type: ItemType }[], index: number) => {
+  const openGalleryAt = (files: { url: string; name: string; type: ItemType; size?: string }[], index: number) => {
     setPreviewFiles(files);
     setPreviewIndex(index);
     setShowPreviewModal(true);
@@ -558,12 +571,14 @@ export default function PublicSingleItemPage() {
                             />
                           ) : (
                             <div className="w-full h-full bg-black relative flex items-center justify-center">
-                              <video src={f.url} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                                <div className="w-10 h-10 rounded-full bg-white/80 dark:bg-black/80 flex items-center justify-center text-gray-900 dark:text-white shadow-md">
-                                  <Video className="w-5 h-5" />
-                                </div>
-                              </div>
+                              <video 
+                                src={f.url} 
+                                controls 
+                                playsInline 
+                                preload="metadata"
+                                onClick={(e) => e.stopPropagation()} 
+                                className="w-full h-full object-contain" 
+                              />
                             </div>
                           )}
 
@@ -583,6 +598,41 @@ export default function PublicSingleItemPage() {
                   </div>
                 );
               })()}
+
+              {/* Audio Files Player List */}
+              {files.filter(f => f.type === 'audio').map((f, aIdx) => (
+                <div 
+                  key={aIdx}
+                  className="p-3.5 bg-gray-50 dark:bg-gray-850/80 border border-gray-200 dark:border-gray-700/60 rounded-2xl space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-2 bg-pink-100 dark:bg-pink-950/50 rounded-xl text-pink-600 dark:text-pink-400 shrink-0">
+                        <Music className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-sm sm:text-base">{f.name}</p>
+                        {f.size && <p className="text-xs text-gray-500 dark:text-gray-400">{f.size}</p>}
+                      </div>
+                    </div>
+                    <a 
+                      href={`${f.url}?download=${encodeURIComponent(f.name)}`} 
+                      download={f.name} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 dark:bg-pink-950/40 hover:bg-pink-100 dark:hover:bg-pink-900/50 text-pink-700 dark:text-pink-300 rounded-xl text-xs font-semibold transition-colors shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download
+                    </a>
+                  </div>
+                  <audio 
+                    src={f.url} 
+                    controls 
+                    preload="metadata"
+                    className="w-full h-10 rounded-xl outline-none" 
+                  />
+                </div>
+              ))}
 
               {/* Document / generic files list */}
               {files.filter(f => f.type === 'file').map((f, docIdx) => (
@@ -722,6 +772,24 @@ export default function PublicSingleItemPage() {
                 />
               ) : previewFiles[previewIndex]?.type === 'video' ? (
                 <video ref={galleryVideoRef} src={previewFiles[previewIndex]?.url} controls playsInline className="max-w-full max-h-full rounded-lg" />
+              ) : previewFiles[previewIndex]?.type === 'audio' ? (
+                <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg max-w-md w-full">
+                  <div className="w-20 h-20 rounded-full bg-pink-100 dark:bg-pink-950/50 text-pink-600 dark:text-pink-400 flex items-center justify-center mb-6">
+                    <Music className="w-10 h-10" />
+                  </div>
+                  <h4 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 text-center mb-2 truncate max-w-full">
+                    {previewFiles[previewIndex]?.name}
+                  </h4>
+                  {previewFiles[previewIndex]?.size && (
+                    <p className="text-xs text-gray-500 mb-6">{previewFiles[previewIndex]?.size}</p>
+                  )}
+                  <audio 
+                    src={previewFiles[previewIndex]?.url} 
+                    controls 
+                    autoPlay 
+                    className="w-full h-11 rounded-xl outline-none" 
+                  />
+                </div>
               ) : (
                 <iframe src={previewFiles[previewIndex]?.url} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
               )}
