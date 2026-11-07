@@ -202,6 +202,7 @@ export default function Home() {
       if (combinedFiles.length > 0) {
         // Multi-file payload format
         const primaryType = combinedFiles.some(f => f.type === 'image') ? 'image' : combinedFiles[0].type;
+        const dbType = primaryType === 'audio' ? 'file' : primaryType;
         const multiPayload = {
           __sharey_multi__: true,
           text: trimmedText,
@@ -212,7 +213,7 @@ export default function Home() {
           .from('shared_items')
           .update({
             title: trimmedTitle,
-            type: primaryType,
+            type: dbType,
             content: JSON.stringify(multiPayload),
             file_name: combinedFiles[0].name,
             file_size: combinedFiles[0].size,
@@ -1055,6 +1056,7 @@ export default function Home() {
         }
 
         const primaryType = uploadedAttachments.some(f => f.type === 'image') ? 'image' : uploadedAttachments[0].type;
+        const dbType = primaryType === 'audio' ? 'file' : primaryType;
         const multiPayload = {
           __sharey_multi__: true,
           text: textToSave.trim() || '',
@@ -1065,7 +1067,7 @@ export default function Home() {
           .from('shared_items')
           .insert({
             user_id: user.id,
-            type: primaryType,
+            type: dbType,
             title: titleToSave.trim() || null,
             content: JSON.stringify(multiPayload),
             file_name: uploadedAttachments[0].name,

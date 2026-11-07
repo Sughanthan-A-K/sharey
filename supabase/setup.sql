@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS public.shared_items (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('text', 'link', 'image', 'video', 'file')),
+    type TEXT NOT NULL CHECK (type IN ('text', 'link', 'image', 'video', 'audio', 'file')),
     content TEXT NOT NULL,
     file_name TEXT,
     file_url TEXT,
