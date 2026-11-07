@@ -31,6 +31,7 @@ export default function PublicCollectionPage() {
   const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [downloadingCardId, setDownloadingCardId] = useState<string | null>(null);
   const galleryVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Keyboard navigation for preview modal (Escape, ArrowLeft, ArrowRight, Space)
@@ -66,6 +67,69 @@ export default function PublicCollectionPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showPreviewModal, previewFiles]);
+
+  const handleDownloadAllCardFiles = async (cardId: string, filesToDownload: { url: string; name: string }[]) => {
+    if (!filesToDownload || filesToDownload.length === 0 || downloadingCardId) return;
+
+    setDownloadingCardId(cardId);
+
+    try {
+      if ('showDirectoryPicker' in window) {
+        let dirHandle: any = null;
+        try {
+          dirHandle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite',
+            startIn: 'downloads'
+          });
+        } catch (pickerErr: any) {
+          if (pickerErr.name === 'AbortError') {
+            setDownloadingCardId(null);
+            return;
+          }
+          throw pickerErr;
+        }
+
+        if (dirHandle) {
+          for (let i = 0; i < filesToDownload.length; i++) {
+            const f = filesToDownload[i];
+            try {
+              const res = await fetch(f.url);
+              const blob = await res.blob();
+
+              const fileHandle = await dirHandle.getFileHandle(f.name, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+            } catch (fileErr) {
+              console.error(`Failed to write file ${f.name}:`, fileErr);
+            }
+          }
+          setDownloadingCardId(null);
+          return;
+        }
+      }
+
+      // Fallback
+      for (let i = 0; i < filesToDownload.length; i++) {
+        const f = filesToDownload[i];
+        const a = document.createElement('a');
+        a.href = `${f.url}?download=${encodeURIComponent(f.name)}`;
+        a.download = f.name;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        if (i < filesToDownload.length - 1) {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+    } catch (err: any) {
+      console.error('Download all error:', err);
+    } finally {
+      setDownloadingCardId(null);
+    }
+  };
 
   const parseFileAttachments = (rawContent: string, fallbackUrl?: string, fallbackName?: string, fallbackType: ItemType = 'file'): ItemFileAttachment[] => {
     try {
@@ -432,6 +496,20 @@ export default function PublicCollectionPage() {
                     <a href={`${cardFiles[0].url}?download=${encodeURIComponent(cardFiles[0].name)}`} download={cardFiles[0].name} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
                       <Download className="w-3.5 h-3.5" /> Download
                     </a>
+                  )}
+                  {cardFiles.length > 1 && (
+                    <button 
+                      onClick={() => handleDownloadAllCardFiles(item.id, cardFiles)}
+                      disabled={downloadingCardId === item.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {downloadingCardId === item.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      <span>{downloadingCardId === item.id ? 'Saving...' : 'Download All'}</span>
+                    </button>
                   )}
                 </div>
               </div>

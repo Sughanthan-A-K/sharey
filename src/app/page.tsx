@@ -149,6 +149,9 @@ export default function Home() {
   const [previewIndex, setPreviewIndex] = useState<number>(0);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
+  // Bulk download state
+  const [downloadingCardId, setDownloadingCardId] = useState<string | null>(null);
+
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -541,6 +544,82 @@ export default function Home() {
     if (error) {
       setItems(previousItems);
       showNotification('Failed to save file sort: ' + error.message, 'error');
+    }
+  };
+
+  const handleDownloadAllCardFiles = async (cardId: string, filesToDownload: { url: string; name: string }[]) => {
+    if (!filesToDownload || filesToDownload.length === 0 || downloadingCardId) return;
+
+    setDownloadingCardId(cardId);
+    showNotification('Choose folder to save files...');
+
+    try {
+      // 1. Check if Modern File System Access API is supported (Desktop Chrome, Edge, Opera)
+      if ('showDirectoryPicker' in window) {
+        let dirHandle: any = null;
+        try {
+          dirHandle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite',
+            startIn: 'downloads'
+          });
+        } catch (pickerErr: any) {
+          // User clicked Cancel in directory picker dialog
+          if (pickerErr.name === 'AbortError') {
+            showNotification('Folder selection cancelled');
+            setDownloadingCardId(null);
+            return;
+          }
+          throw pickerErr;
+        }
+
+        if (dirHandle) {
+          showNotification(`Downloading ${filesToDownload.length} file(s) into selected folder...`);
+          let successCount = 0;
+
+          for (let i = 0; i < filesToDownload.length; i++) {
+            const f = filesToDownload[i];
+            try {
+              const res = await fetch(f.url);
+              const blob = await res.blob();
+
+              const fileHandle = await dirHandle.getFileHandle(f.name, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              successCount++;
+            } catch (fileErr) {
+              console.error(`Failed to write file ${f.name}:`, fileErr);
+            }
+          }
+
+          showNotification(`All ${successCount} file(s) saved directly into your folder!`);
+          setDownloadingCardId(null);
+          return;
+        }
+      }
+
+      // 2. Fallback for browsers/mobile without showDirectoryPicker
+      showNotification(`Downloading ${filesToDownload.length} individual file(s)...`);
+      for (let i = 0; i < filesToDownload.length; i++) {
+        const f = filesToDownload[i];
+        const a = document.createElement('a');
+        a.href = `${f.url}?download=${encodeURIComponent(f.name)}`;
+        a.download = f.name;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        if (i < filesToDownload.length - 1) {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      showNotification(`All ${filesToDownload.length} file(s) downloaded!`);
+    } catch (err: any) {
+      console.error('Download all error:', err);
+      showNotification('Failed to download files: ' + (err.message || 'Error'), 'error');
+    } finally {
+      setDownloadingCardId(null);
     }
   };
 
@@ -2011,7 +2090,24 @@ export default function Home() {
                       {cardFiles.length > 1 && (
                         <div className="flex items-center justify-between pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
                           <span>{cardFiles.length} files attached</span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadAllCardFiles(item.id, cardFiles);
+                              }}
+                              disabled={downloadingCardId === item.id}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors font-semibold"
+                              title="Download all files in this card"
+                            >
+                              {downloadingCardId === item.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                              <span className="text-[11px]">{downloadingCardId === item.id ? 'Saving...' : 'Download All'}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2140,6 +2236,20 @@ export default function Home() {
                     <a href={`${cardFiles[0].url}?download=${encodeURIComponent(cardFiles[0].name)}`} download={cardFiles[0].name} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors">
                       <Download className="w-3.5 h-3.5" /> Download
                     </a>
+                  )}
+                  {cardFiles.length > 1 && (
+                    <button 
+                      onClick={() => handleDownloadAllCardFiles(item.id, cardFiles)} 
+                      disabled={downloadingCardId === item.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {downloadingCardId === item.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      <span>{downloadingCardId === item.id ? 'Saving...' : 'Download All'}</span>
+                    </button>
                   )}
                   {/* Share Link for every card */}
                   <button 

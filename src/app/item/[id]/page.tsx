@@ -29,6 +29,7 @@ export default function PublicSingleItemPage() {
   const [previewFiles, setPreviewFiles] = useState<{ url: string; name: string; type: ItemType }[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const galleryVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Keyboard navigation for preview modal (Escape, ArrowLeft, ArrowRight, Space)
@@ -95,6 +96,80 @@ export default function PublicSingleItemPage() {
       }];
     }
     return [];
+  };
+
+  const handleDownloadAllFiles = async (filesToDownload: { url: string; name: string }[]) => {
+    if (!filesToDownload || filesToDownload.length === 0 || isDownloadingAll) return;
+
+    setIsDownloadingAll(true);
+    showNotification('Choose folder to save files...');
+
+    try {
+      if ('showDirectoryPicker' in window) {
+        let dirHandle: any = null;
+        try {
+          dirHandle = await (window as any).showDirectoryPicker({
+            mode: 'readwrite',
+            startIn: 'downloads'
+          });
+        } catch (pickerErr: any) {
+          if (pickerErr.name === 'AbortError') {
+            showNotification('Folder selection cancelled');
+            setIsDownloadingAll(false);
+            return;
+          }
+          throw pickerErr;
+        }
+
+        if (dirHandle) {
+          showNotification(`Downloading ${filesToDownload.length} file(s) into selected folder...`);
+          let successCount = 0;
+
+          for (let i = 0; i < filesToDownload.length; i++) {
+            const f = filesToDownload[i];
+            try {
+              const res = await fetch(f.url);
+              const blob = await res.blob();
+
+              const fileHandle = await dirHandle.getFileHandle(f.name, { create: true });
+              const writable = await fileHandle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              successCount++;
+            } catch (fileErr) {
+              console.error(`Failed to write file ${f.name}:`, fileErr);
+            }
+          }
+
+          showNotification(`All ${successCount} file(s) saved directly into your folder!`);
+          setIsDownloadingAll(false);
+          return;
+        }
+      }
+
+      // Fallback
+      showNotification(`Downloading ${filesToDownload.length} individual file(s)...`);
+      for (let i = 0; i < filesToDownload.length; i++) {
+        const f = filesToDownload[i];
+        const a = document.createElement('a');
+        a.href = `${f.url}?download=${encodeURIComponent(f.name)}`;
+        a.download = f.name;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        if (i < filesToDownload.length - 1) {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      showNotification(`All ${filesToDownload.length} file(s) downloaded!`);
+    } catch (err: any) {
+      console.error('Download all error:', err);
+      showNotification('Failed to download files: ' + (err.message || 'Error'));
+    } finally {
+      setIsDownloadingAll(false);
+    }
   };
 
   const getDisplayContent = (item: SharedItem): string => {
@@ -431,6 +506,26 @@ export default function PublicSingleItemPage() {
           {/* Attached Files & Gallery */}
           {files.length > 0 && (
             <div className="space-y-4 pt-2">
+              {files.length > 1 && (
+                <div className="flex items-center justify-between pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <span>{files.length} files attached</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadAllFiles(files)}
+                    disabled={isDownloadingAll}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors font-semibold text-xs"
+                    title="Download all files in this card"
+                  >
+                    {isDownloadingAll ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isDownloadingAll ? 'Saving files...' : 'Download All Files'}</span>
+                  </button>
+                </div>
+              )}
+
               {/* Unified Visual Media Grid (Images and Videos Side-by-Side) */}
               {(() => {
                 const visualFiles = files.filter(f => f.type === 'image' || f.type === 'video');
@@ -519,16 +614,41 @@ export default function PublicSingleItemPage() {
           )}
 
           {/* Action Row */}
-          {textContent && (
-            <div className="flex flex-wrap items-center gap-2 pt-6 mt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex flex-wrap items-center gap-2 pt-6 mt-4 border-t border-gray-100 dark:border-gray-800">
+            {textContent && (
               <button 
                 onClick={() => handleCopy(textContent)} 
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors"
               >
                 <Copy className="w-4 h-4" /> Copy Text
               </button>
-            </div>
-          )}
+            )}
+            {files.length === 1 && (
+              <a 
+                href={`${files[0].url}?download=${encodeURIComponent(files[0].name)}`} 
+                download={files[0].name} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                <Download className="w-4 h-4" /> Download
+              </a>
+            )}
+            {files.length > 1 && (
+              <button 
+                onClick={() => handleDownloadAllFiles(files)} 
+                disabled={isDownloadingAll}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                {isDownloadingAll ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>{isDownloadingAll ? 'Saving files...' : 'Download All'}</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
