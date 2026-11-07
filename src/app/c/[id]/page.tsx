@@ -512,31 +512,43 @@ export default function PublicCollectionPage() {
                       ))}
 
                       {/* Document / Other files */}
-                      {cardFiles.filter(f => f.type === 'file').map((f, docIdx) => (
-                        <div 
-                          key={docIdx}
-                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60 rounded-xl"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-3">
-                            <div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-orange-500">
-                              <FileText className="w-4 h-4" />
+                      {cardFiles.filter(f => f.type === 'file').map((f, docIdx) => {
+                        const originalIdx = cardFiles.findIndex(file => file.url === f.url);
+                        return (
+                          <div 
+                            key={docIdx}
+                            onClick={() => openGalleryAt(cardFiles, originalIdx !== -1 ? originalIdx : 0)}
+                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700/60 rounded-xl transition-all cursor-pointer group"
+                            title="Click to view file"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-3">
+                              <div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-orange-500 group-hover:scale-105 transition-transform">
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{f.name}</p>
+                                {f.size && <p className="text-xs text-gray-500 dark:text-gray-400">{f.size}</p>}
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-gray-900 dark:text-gray-100 font-medium truncate text-sm">{f.name}</p>
-                              {f.size && <p className="text-xs text-gray-500 dark:text-gray-400">{f.size}</p>}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 font-medium transition-colors">
+                                <Eye className="w-3.5 h-3.5" /> View
+                              </span>
+                              <a 
+                                href={`${f.url}?download=${encodeURIComponent(f.name)}`} 
+                                download={f.name} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                                title="Download file"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Download
+                              </a>
                             </div>
                           </div>
-                          <a 
-                            href={`${f.url}?download=${encodeURIComponent(f.name)}`} 
-                            download={f.name} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-colors shrink-0"
-                          >
-                            <Download className="w-3.5 h-3.5" /> Download
-                          </a>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -658,7 +670,48 @@ export default function PublicCollectionPage() {
                   />
                 </div>
               ) : (
-                <iframe src={previewFiles[previewIndex]?.url} className="w-full h-full min-h-[60vh] bg-white rounded-lg border border-gray-200 dark:border-gray-800" />
+                <div className="w-full h-full flex flex-col items-center justify-center p-2 relative">
+                  {/* If PDF, render direct in iframe */}
+                  {previewFiles[previewIndex]?.name?.toLowerCase().endsWith('.pdf') ? (
+                    <iframe 
+                      src={`${previewFiles[previewIndex]?.url}#view=FitH`} 
+                      className="w-full h-full min-h-[75vh] bg-white rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm" 
+                      title={previewFiles[previewIndex]?.name || 'PDF Preview'}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-xl max-w-lg w-full text-center">
+                      <div className="w-20 h-20 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-5 shadow-sm">
+                        <FileText className="w-10 h-10" />
+                      </div>
+                      <h4 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 break-all px-4">
+                        {previewFiles[previewIndex]?.name}
+                      </h4>
+                      {previewFiles[previewIndex]?.size && (
+                        <p className="text-sm text-gray-500 mb-6">{previewFiles[previewIndex]?.size}</p>
+                      )}
+                      
+                      <div className="flex flex-wrap items-center justify-center gap-3 w-full">
+                        <a 
+                          href={previewFiles[previewIndex]?.url} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow"
+                        >
+                          <ExternalLink className="w-4 h-4" /> Open in New Tab
+                        </a>
+                        <a 
+                          href={`${previewFiles[previewIndex]?.url}?download=${encodeURIComponent(previewFiles[previewIndex]?.name || 'download')}`} 
+                          download={previewFiles[previewIndex]?.name} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold text-sm transition-colors"
+                        >
+                          <Download className="w-4 h-4" /> Download
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
